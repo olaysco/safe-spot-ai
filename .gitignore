@@ -1,0 +1,12 @@
+mockup/*
+.venv/
+.env
+.env.*
+!.env.example
+__pycache__/
+.pytest_cache/
+.local/
+*.db
+*.db-shm
+*.db-wal
+sites/
