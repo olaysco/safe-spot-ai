@@ -77,3 +77,8 @@ class Riddor(Revision):
     notified_date: str = ''
     received_date: str = ''
     reason: str = Field(min_length=3, max_length=2000)
+
+
+class ReportAssistance(Strict):
+    description: str = Field(min_length=10, max_length=8000)
+    consent: Literal[True]

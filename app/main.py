@@ -174,6 +174,20 @@ def create_app(database_url=None, worker=True):
     def staff(user=Depends(current_user), db=Depends(db_session)):
         return [{'id': u.id, 'name': u.name, 'role': u.role} for u in db.scalars(select(User))]
 
+    @app.post('/api/report-assistance')
+    def report_assistance(payload: schemas.ReportAssistance, request: Request, db=Depends(db_session)):
+        import json
+        rate_limit(request, db, 'assistance', 20)
+        try:
+            result = ai.generate('Extract only explicit report details. Return a JSON object with location, time, harm, and remains. Use an empty string for missing details. Do not infer a place, time, injury, or current condition.', {'description': payload.description})
+            values = json.loads(result)
+            require(isinstance(values, dict), 'AI returned invalid details. Complete the report yourself.', 503)
+            details = {key: values.get(key, '') for key in ('location', 'time', 'harm', 'remains')}
+            require(all(isinstance(v, str) and len(v) <= 2000 for v in details.values()), 'AI returned invalid details. Complete the report yourself.', 503)
+        except Exception:
+            raise HTTPException(503, 'AI assistance is unavailable. Complete the report yourself.')
+        return {'details': details, 'requires_review': True}
+
     @app.post('/api/reports', status_code=201)
     def report(payload: schemas.Report, request: Request, db=Depends(db_session)):
         rate_limit(request, db, 'report', 30)

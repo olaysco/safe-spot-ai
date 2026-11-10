@@ -151,3 +151,17 @@ def test_reporter_image_upload_does_not_expose_case(system):
     case = client.get('/api/cases/'+receipt['id']).json()
     assign(client, case)
     assert client.post('/api/cases/'+receipt['id']+'/attachments', headers={'x-tracking-token': receipt['tracking_token']}, files={'file': ('evidence.png', buffer.getvalue(), 'image/png')}).status_code == 403
+
+
+def test_report_assistance_needs_consent_and_keeps_human_review(system, monkeypatch):
+    from app import ai
+    _, client = system
+    payload = {'description': 'Water covers the floor near the east entrance.', 'consent': True}
+    monkeypatch.setattr(ai, 'generate', lambda *args: '{"location":"east entrance","time":"","harm":"","remains":"Water covers the floor"}')
+    response = client.post('/api/report-assistance', json=payload)
+    assert response.status_code == 200
+    assert response.json()['requires_review'] is True
+    assert response.json()['details']['time'] == ''
+    assert client.post('/api/report-assistance', json={**payload, 'consent': False}).status_code == 422
+    monkeypatch.setattr(ai, 'generate', lambda *args: 'Invalid output')
+    assert client.post('/api/report-assistance', json=payload).status_code == 503
