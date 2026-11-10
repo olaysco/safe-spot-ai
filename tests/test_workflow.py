@@ -142,7 +142,7 @@ def test_reporter_image_upload_does_not_expose_case(system):
     buffer = io.BytesIO()
     Image.new('RGB', (10, 10), 'blue').save(buffer, format='PNG')
     response = client.post('/api/cases/'+receipt['id']+'/attachments', headers={'x-tracking-token': receipt['tracking_token']}, files={'file': ('evidence.png', buffer.getvalue(), 'image/png')})
-    assert response.status_code == 200, response.text
+    assert response.status_code == 201, response.text
     assert set(response.json()) == {'id', 'name'}
     photo_id = response.json()['id']
     assert client.get('/api/attachments/'+photo_id).status_code == 401
