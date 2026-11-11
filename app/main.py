@@ -178,14 +178,9 @@ def create_app(database_url=None, worker=True):
 
     @app.post('/api/report-assistance')
     def report_assistance(payload: schemas.ReportAssistance, request: Request, db=Depends(db_session)):
-        import json
         rate_limit(request, db, 'assistance', 20)
         try:
-            result = ai.generate('Extract only explicit report details. Return a JSON object with location, time, harm, and remains. Use an empty string for missing details. Do not infer a place, time, injury, or current condition.', {'description': payload.description})
-            values = json.loads(result)
-            require(isinstance(values, dict), 'AI returned invalid details. Complete the report yourself.', 503)
-            details = {key: values.get(key, '') for key in ('location', 'time', 'harm', 'remains')}
-            require(all(isinstance(v, str) and len(v) <= 2000 for v in details.values()), 'AI returned invalid details. Complete the report yourself.', 503)
+            details = ai.extract_details(payload.description)
         except Exception:
             raise HTTPException(503, 'AI assistance is unavailable. Complete the report yourself.')
         return {'details': details, 'requires_review': True}
@@ -328,7 +323,7 @@ def create_app(database_url=None, worker=True):
         role(user, 'handler', 'manager')
         case = fetch_case(db, case_id, user, payload.version)
         require(case.data['report']['consent'], 'The reporter did not consent to AI assistance.', 403)
-        require(ai.capabilities()['decision'], 'The decision model is not connected.', 503)
+        require(ai.capabilities()['decision'], 'AI is not connected.', 503)
         job = db.get(Job, 'triage:'+case.id)
         if not job:
             job = Job(id='triage:'+case.id, case_id=case.id, kind='triage')

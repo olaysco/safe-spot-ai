@@ -109,7 +109,7 @@ def test_alerts_are_deduplicated_and_skip_controlled_risks(system):
 
 def test_ai_failure_preserves_report(system, monkeypatch):
     app, client = system
-    monkeypatch.delenv('DECISION_ENDPOINT', raising=False)
+    monkeypatch.delenv('TEXT_AI_BASE_URL', raising=False)
     r = client.post('/api/reports', json={**REPORT, 'consent': True}).json()
     tick(app.state.db)
     login(client, 'handler')
@@ -157,14 +157,29 @@ def test_report_assistance_needs_consent_and_keeps_human_review(system, monkeypa
     from app import ai
     _, client = system
     payload = {'description': 'Water covers the floor near the east entrance.', 'consent': True}
-    monkeypatch.setattr(ai, 'generate', lambda *args: '{"location":"east entrance","time":"","harm":"","remains":"Water covers the floor"}')
+    monkeypatch.setattr(ai, 'generate', lambda *args, **kwargs: '{"location":"east entrance","time":"","harm":"","remains":"Water covers the floor"}')
     response = client.post('/api/report-assistance', json=payload)
     assert response.status_code == 200
     assert response.json()['requires_review'] is True
     assert response.json()['details']['time'] == ''
     assert client.post('/api/report-assistance', json={**payload, 'consent': False}).status_code == 422
-    monkeypatch.setattr(ai, 'generate', lambda *args: 'Invalid output')
+    monkeypatch.setattr(ai, 'generate', lambda *args, **kwargs: 'Invalid output')
     assert client.post('/api/report-assistance', json=payload).status_code == 503
+
+
+def test_ai_triage_keeps_staff_approval_pending(system, monkeypatch):
+    from app import ai
+    app, client = system
+    monkeypatch.setenv('TEXT_AI_MODEL', 'gpt-5.4-mini')
+    monkeypatch.setattr(ai, 'generate', lambda *args, **kwargs: '{"category":"Hazard","priority":"Urgent"}')
+    receipt = client.post('/api/reports', json={**REPORT, 'consent': True}).json()
+    tick(app.state.db)
+    login(client, 'handler')
+    case = client.get('/api/cases/'+receipt['id']).json()
+    assert case['ai']['suggestions'] == {'category': 'Hazard', 'priority': 'Urgent'}
+    assert case['status'] == 'Needs review'
+    assert not case['approvals'].get('triage')
+    assert case['report']['description'] == REPORT['description']
 
 
 def test_storage_failure_does_not_add_an_attachment(system, monkeypatch):
