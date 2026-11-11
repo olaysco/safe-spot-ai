@@ -65,8 +65,30 @@ def seed():
     print('Local setup is complete. Account details: .local/demo-accounts.txt')
 
 
+def create_user():
+    from getpass import getpass
+    name = input('Staff name: ').strip()
+    email = input('Staff email: ').strip().lower()
+    role = input('Role (handler, officer, manager): ').strip()
+    password = getpass('Password (at least 14 characters): ')
+    if not name or '@' not in email or role not in ('handler', 'officer', 'manager') or len(password) < 14:
+        raise SystemExit('Check the account details and password length.')
+    if password != getpass('Enter the password again: '):
+        raise SystemExit('The passwords do not match.')
+    engine, factory = connect()
+    try:
+        with factory() as db:
+            if db.scalar(select(User).where(User.email == email)):
+                raise SystemExit('This account already exists.')
+            db.add(User(name=name, email=email, role=role, password=hash_password(password)))
+            db.commit()
+    finally:
+        engine.dispose()
+    print('The staff account is created.')
+
+
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser(description='Safe Spot local setup')
-    parser.add_argument('command', choices=['seed'])
-    parser.parse_args()
-    seed()
+    parser = argparse.ArgumentParser(description='Safe Spot account setup')
+    parser.add_argument('command', choices=['seed', 'user'])
+    args = parser.parse_args()
+    seed() if args.command == 'seed' else create_user()

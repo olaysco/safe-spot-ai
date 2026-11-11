@@ -133,3 +133,25 @@ def tick(factory):
     except (IntegrityError, StaleDataError):
         # The next worker cycle retries concurrent changes.
         pass
+
+
+def run_once():
+    from sqlalchemy import text
+    from app.database import connect
+    engine, factory = connect()
+    try:
+        with engine.connect() as connection:
+            locked = engine.dialect.name == 'postgresql'
+            if locked and not connection.scalar(text('SELECT pg_try_advisory_lock(73401928)')):
+                return
+            try:
+                tick(factory)
+            finally:
+                if locked:
+                    connection.execute(text('SELECT pg_advisory_unlock(73401928)'))
+    finally:
+        engine.dispose()
+
+
+if __name__ == '__main__':
+    run_once()

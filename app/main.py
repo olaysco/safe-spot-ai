@@ -18,6 +18,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm.exc import StaleDataError
 
 from app import ai, schemas
+from app.storage import create_storage
 from app.database import Attachment, Case, Group, Job, Limit, Notification, Session, User, connect, uid
 from app.domain import approval, audit, invalidate, new_case, require, riddor_details, serialize, status, targets
 from app.security import digest, hash_password, verify_password
@@ -29,8 +30,7 @@ STATIC = Path(__file__).parent / 'static'
 
 def create_app(database_url=None, worker=True):
     engine, factory = connect(database_url)
-    uploads = Path(os.getenv('UPLOAD_DIR', '.local/uploads'))
-    uploads.mkdir(parents=True, exist_ok=True)
+    evidence_storage = create_storage()
 
     @asynccontextmanager
     async def lifespan(app):
@@ -50,10 +50,12 @@ def create_app(database_url=None, worker=True):
         stop.set()
         if task:
             await task
+        evidence_storage.close()
         engine.dispose()
 
     app = FastAPI(title='Safe Spot', lifespan=lifespan)
     app.state.db = factory
+    app.state.storage = evidence_storage
 
     @app.middleware('http')
     async def boundary(request, call_next):
@@ -450,8 +452,10 @@ def create_app(database_url=None, worker=True):
         except (UnidentifiedImageError, OSError, Image.DecompressionBombError):
             raise HTTPException(422, 'The image could not be read.')
         photo = Attachment(id=uid(), case_id=case.id, name=Path(file.filename or 'photo').name[:140], mime='image/jpeg')
-        path = uploads / photo.id
-        path.write_bytes(output.getvalue())
+        try:
+            await asyncio.to_thread(evidence_storage.put, photo.id, output.getvalue())
+        except Exception:
+            raise HTTPException(503, 'Image storage is unavailable. Try the upload again.')
         db.add(photo)
         data = copy.deepcopy(case.data)
         if not reporter:
@@ -461,7 +465,10 @@ def create_app(database_url=None, worker=True):
             result = persist(db, case, data)
             return {'id': photo.id, 'name': photo.name} if reporter else result
         except Exception:
-            path.unlink(missing_ok=True)
+            try:
+                await asyncio.to_thread(evidence_storage.delete, photo.id)
+            except Exception:
+                log.exception('Evidence cleanup failed.')
             raise
 
     @app.get('/api/attachments/{photo_id}')
@@ -469,7 +476,13 @@ def create_app(database_url=None, worker=True):
         photo = db.get(Attachment, photo_id)
         require(photo, 'Image not found.', 404)
         fetch_case(db, photo.case_id, user)
-        return FileResponse(uploads / photo.id, media_type='image/jpeg')
+        try:
+            content = evidence_storage.get(photo.id)
+        except FileNotFoundError:
+            raise HTTPException(404, 'Image not found.')
+        except Exception:
+            raise HTTPException(503, 'Image storage is unavailable. Try again later.')
+        return Response(content, media_type='image/jpeg')
 
     @app.get('/')
     def home():

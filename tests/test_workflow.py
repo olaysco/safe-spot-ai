@@ -165,3 +165,33 @@ def test_report_assistance_needs_consent_and_keeps_human_review(system, monkeypa
     assert client.post('/api/report-assistance', json={**payload, 'consent': False}).status_code == 422
     monkeypatch.setattr(ai, 'generate', lambda *args: 'Invalid output')
     assert client.post('/api/report-assistance', json=payload).status_code == 503
+
+
+def test_storage_failure_does_not_add_an_attachment(system, monkeypatch):
+    import io
+    from PIL import Image
+    from app.database import Attachment
+    app, client = system
+    receipt = create(client)
+    content = io.BytesIO()
+    Image.new('RGB', (10, 10)).save(content, format='PNG')
+    def unavailable(*args):
+        raise OSError('Storage offline')
+    monkeypatch.setattr(app.state.storage, 'put', unavailable)
+    response = client.post('/api/cases/'+receipt['id']+'/attachments', headers={'x-tracking-token': receipt['tracking_token']}, files={'file': ('photo.png', content.getvalue(), 'image/png')})
+    assert response.status_code == 503
+    with app.state.db() as db:
+        assert list(db.scalars(select(Attachment))) == []
+
+
+def test_worker_entry_point_processes_notifications(system, monkeypatch):
+    from app import database as database_module
+    from app.worker import run_once
+    app, client = system
+    create(client)
+    factory = app.state.db
+    engine = factory.kw['bind']
+    monkeypatch.setattr(database_module, 'connect', lambda: (engine, factory))
+    run_once()
+    with factory() as db:
+        assert all(n.state == 'captured' for n in db.scalars(select(Notification)))
