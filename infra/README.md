@@ -15,7 +15,7 @@ azd env new safespot --location uksouth
 ```
 
 Select your Azure subscription when prompted.
-Open `.azure/safespot/.env` in your editor.
+Create `.azure/safespot/secrets.env` in your editor.
 Add this setting with a unique database password:
 
 ```dotenv
@@ -23,6 +23,13 @@ AZURE_POSTGRES_PASSWORD="REPLACE_WITH_YOUR_DATABASE_PASSWORD"
 ```
 
 Use at least 20 characters, with uppercase letters, lowercase letters, numbers, and `!` or `-`.
+Import the password into the deployment environment:
+
+```sh
+chmod 600 .azure/safespot/secrets.env
+azd env set --file .azure/safespot/secrets.env
+```
+
 Keep the same environment settings and password for subsequent deployments.
 Git excludes local settings in `.azure/`.
 
