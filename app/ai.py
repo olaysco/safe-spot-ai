@@ -54,7 +54,7 @@ def generate(task, evidence, *, schema=None):
         raise AIUnavailable('AI is not connected. Complete the task manually.')
     body = {
         'model': os.environ['TEXT_AI_MODEL'],
-        'reasoning_effort': 'none',
+        'reasoning_effort': 'minimal',
         'max_completion_tokens': 2048,
         'messages': [
             {'role': 'system', 'content': (

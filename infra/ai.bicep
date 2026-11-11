@@ -30,10 +30,10 @@ resource inferenceAccess 'Microsoft.Authorization/roleAssignments@2022-04-01' = 
 
 resource textModel 'Microsoft.CognitiveServices/accounts/deployments@2025-06-01' = {
   parent: account
-  name: 'gpt-5.4-mini'
+  name: 'gpt-5-mini'
   sku: { name: 'GlobalStandard', capacity: 10 }
   properties: {
-    model: { format: 'OpenAI', name: 'gpt-5.4-mini', version: '2026-03-17' }
+    model: { format: 'OpenAI', name: 'gpt-5-mini', version: '2025-08-07' }
     versionUpgradeOption: 'NoAutoUpgrade'
   }
 }

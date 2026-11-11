@@ -10,7 +10,7 @@ People review the evidence and approve each critical decision.
 
 - **Simple incident reporting.** Guided steps help people explain what happened, identify the location, and add photos without technical knowledge.
 - **Voice input.** Reporters can speak their description in supported browsers, then check and edit the text.
-- **AI assistance.** GPT-5.4-mini on Azure extracts report details, suggests categories and priorities, and prepares outcome responses and manager summaries.
+- **AI assistance.** GPT-5-mini on Azure extracts report details, suggests categories and priorities, and prepares outcome responses and manager summaries.
 - **Human approval.** Staff approve assignments, field findings, risk control, outcome responses, and closure. Changes cancel affected approvals.
 - **Report tracking.** A reference and private tracking code let reporters check progress without a staff account.
 - **Case management.** Handlers can filter reports by status, priority, officer, location, deadline, and reporter age group.
@@ -31,7 +31,7 @@ The diagram shows the Azure deployment defined in this repository.
 
 Staff approve critical actions.
 Dashed lines show optional AI and SMTP connections.
-The Azure configuration supports one optional GPT-5.4-mini deployment and captures email in the application outbox.
+The Azure configuration supports one optional GPT-5-mini deployment and captures email in the application outbox.
 
 [Text diagram](docs/architecture/safe-spot.mmd)
 

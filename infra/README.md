@@ -86,7 +86,7 @@ For shared infrastructure changes, repeat the preview and `azd up` commands.
 
 ## Enable AI
 
-Enable GPT-5.4-mini for report assistance, triage suggestions, response drafts, and manager summaries:
+Enable GPT-5-mini for report assistance, triage suggestions, response drafts, and manager summaries:
 
 ```sh
 azd env set SAFE_SPOT_AI_ENABLED true
@@ -94,12 +94,12 @@ azd provision --preview
 azd up
 ```
 
-Bicep creates one GPT-5.4-mini deployment in Microsoft Foundry.
+Bicep creates one GPT-5-mini deployment in Microsoft Foundry.
 The web app and worker use managed identity for access.
 No AI API key is required in Azure.
 Staff must review and approve AI suggestions.
 
-The deployment uses Global Standard billing and model version `2026-03-17`.
+The deployment uses Global Standard billing and model version `2025-08-07`.
 Azure charges for model usage.
 Global Standard can process requests outside the resource region.
 The Azure subscription must have model quota in the selected region.
@@ -115,7 +115,7 @@ Voice input continues to use browser speech recognition.
 | Evidence storage | Private Blob container; Standard LRS |
 | Image registry | Standard Container Registry; separate remote builds for web and worker |
 | Network and access | Separate subnets, private database DNS, and managed identity |
-| AI, when enabled | GPT-5.4-mini; Global Standard; capacity 10; managed identity access |
+| AI, when enabled | GPT-5-mini; Global Standard; capacity 10; managed identity access |
 
 Email stays in capture mode until SMTP is configured.
 AI stays disabled until `SAFE_SPOT_AI_ENABLED` is set to `true`.

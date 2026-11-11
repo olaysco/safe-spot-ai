@@ -10,7 +10,7 @@ from app import ai
 @pytest.fixture
 def model(monkeypatch):
     monkeypatch.setenv('TEXT_AI_BASE_URL', 'https://safe-spot.services.ai.azure.com/openai/v1')
-    monkeypatch.setenv('TEXT_AI_MODEL', 'gpt-5.4-mini')
+    monkeypatch.setenv('TEXT_AI_MODEL', 'gpt-5-mini')
     monkeypatch.setenv('TEXT_AI_AUTH_MODE', 'api_key')
     monkeypatch.setenv('TEXT_AI_API_KEY', 'test-key')
     requests = []
@@ -43,8 +43,8 @@ def test_extract_details_uses_azure_identity_and_strict_schema(model, monkeypatc
     assert str(request.url) == 'https://safe-spot.services.ai.azure.com/openai/v1/chat/completions'
     assert request.headers['Authorization'] == 'Bearer identity-token'
     assert scopes == ['https://cognitiveservices.azure.com/.default']
-    assert body['model'] == 'gpt-5.4-mini'
-    assert body['max_completion_tokens'] == 2048 and body['reasoning_effort'] == 'none'
+    assert body['model'] == 'gpt-5-mini'
+    assert body['max_completion_tokens'] == 2048 and body['reasoning_effort'] == 'minimal'
     assert 'temperature' not in body and 'max_tokens' not in body
     schema = body['response_format']['json_schema']
     assert schema['strict'] is True
@@ -60,7 +60,7 @@ def test_triage_omits_contact_and_age_and_validates_choices(model):
     reply['choices'][0]['message']['content'] = '{"category":"Hazard","priority":"Urgent"}'
     result = ai.classify(report)
     assert result['suggestions'] == {'category': 'Hazard', 'priority': 'Urgent'}
-    assert result['model'] == 'gpt-5.4-mini'
+    assert result['model'] == 'gpt-5-mini'
     request = requests[0]
     assert request.headers['api-key'] == 'test-key'
     evidence = json.loads(json.loads(request.content)['messages'][1]['content'].split('\nEvidence: ')[1])

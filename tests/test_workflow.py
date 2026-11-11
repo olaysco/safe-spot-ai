@@ -170,7 +170,7 @@ def test_report_assistance_needs_consent_and_keeps_human_review(system, monkeypa
 def test_ai_triage_keeps_staff_approval_pending(system, monkeypatch):
     from app import ai
     app, client = system
-    monkeypatch.setenv('TEXT_AI_MODEL', 'gpt-5.4-mini')
+    monkeypatch.setenv('TEXT_AI_MODEL', 'gpt-5-mini')
     monkeypatch.setattr(ai, 'generate', lambda *args, **kwargs: '{"category":"Hazard","priority":"Urgent"}')
     receipt = client.post('/api/reports', json={**REPORT, 'consent': True}).json()
     tick(app.state.db)
