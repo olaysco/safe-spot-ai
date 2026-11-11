@@ -3,11 +3,12 @@ import os
 import smtplib
 import time
 from email.message import EmailMessage
+from azure.core.exceptions import HttpResponseError
 from sqlalchemy import or_, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm.exc import StaleDataError
-from app import ai
-from app.database import Case, Group, Job, Notification
+from app import ai, mail
+from app.database import Case, Group, Job, Limit, Notification
 from app.domain import targets
 
 
@@ -81,11 +82,55 @@ def process_ai(factory):
         db.commit()
 
 
+def email_capacity(db, bucket, maximum):
+    now = time.time()
+    limit = db.get(Limit, bucket)
+    if not limit:
+        limit = Limit(key=bucket, count=0, expires=now + 3600)
+        db.add(limit)
+    elif limit.expires <= now:
+        limit.count, limit.expires = 0, now + 3600
+    if limit.count >= maximum:
+        return False
+    limit.count += 1
+    return True
+
+
+def check_azure_email(db):
+    notes = list(db.scalars(select(Notification).where(Notification.state == 'sending',
+                           Notification.data['provider'].as_string() == 'azure')
+                           .order_by(Notification.created).limit(2)))
+    for note in notes:
+        if not email_capacity(db, 'email:azure:status', 20):
+            break
+        db.commit()
+        try:
+            status = mail.azure_status(note)
+            if status == 'Succeeded':
+                note.state = 'sent'
+            elif status in ('Failed', 'Canceled'):
+                note.state = 'failed'
+        except HttpResponseError as exc:
+            if exc.status_code == 404:
+                note.state = 'delivery_unknown'
+        except Exception:
+            pass
+        if note.state == 'sending' and time.time() - note.data['submitted_at'] > 86400:
+            note.state = 'delivery_unknown'
+        db.commit()
+
+
 def deliver(factory):
     mode = os.getenv('EMAIL_MODE', 'capture')
     with factory() as db:
-        notes = list(db.scalars(select(Notification).where(Notification.state == 'recorded')))
+        if mode == 'azure':
+            check_azure_email(db)
+        notes = list(db.scalars(select(Notification).where(Notification.state == 'recorded')
+                               .order_by(Notification.created)))
+        submitted = 0
         for note in notes:
+            if note.data.get('next_attempt', 0) > time.time():
+                continue
             ids = note.data.get('case_ids', [])
             if note.key.startswith(('overdue:', 'recurrence:')) and ids:
                 cases = [db.get(Case, i) for i in ids]
@@ -98,9 +143,31 @@ def deliver(factory):
                 if not approved or note.key != f'outcome:{case.id}:{approved["at"]}':
                     note.state = 'cancelled'
                     continue
-            if mode != 'smtp':
+            if mode == 'capture':
                 note.state = 'captured'
                 continue
+            if mode == 'azure':
+                if submitted >= 2 or not email_capacity(db, 'email:azure:send', 10):
+                    break
+                note.state = 'sending'
+                note.data = {**note.data, 'provider': 'azure', 'submitted_at': time.time()}
+                db.commit()
+                submitted += 1
+                try:
+                    mail.send_azure(note)
+                except HttpResponseError as exc:
+                    if exc.status_code == 429:
+                        note.state = 'recorded'
+                        note.data = {**note.data, 'next_attempt': time.time() + 3600}
+                    elif exc.status_code and 400 <= exc.status_code < 500 and exc.status_code not in (408, 409):
+                        note.state = 'failed'
+                    # Check uncertain requests by operation ID before another send.
+                except Exception:
+                    pass
+                db.commit()
+                continue
+            if mode != 'smtp':
+                raise ValueError('The email mode is not supported.')
             note.state = 'sending'
             db.commit()
             msg = EmailMessage()
