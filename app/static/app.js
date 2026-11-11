@@ -7,6 +7,8 @@ const hours=(end,start)=>Math.max(0,(end-start)/3600).toFixed(1);
 let user=null,config={},staff=[],cases=[],groups=[],selected=null,view='report',step=0,receipt=null,photos=[],days=30,locationFilter='';
 let draft={description:'',location:'',time:'',harm:'',remains:'',age_range:'',consent:null,name:'',email:''};
 let filters={search:'',status:'',priority:'',officer:'',location:'',deadline:'',age:''};
+let queueView='board',boardStatus='Needs review',moreFiltersOpen=false;
+const caseStatuses=['Needs review','Assigned','Risk controlled','Closed'];
 const steps=['description','consent','location','time','harm','remains','age_range','contact','review'];
 const categories=['Hazard','Near miss','Minor injury','Other incident'];
 const priorities=['Immediate','Urgent','Routine'];
@@ -27,11 +29,11 @@ function tag(status){return `<span class="tag ${status==='Closed'?'grey':status=
 function officer(id){return staff.find(s=>s.id===id)?.name||'Not assigned';}
 function nav(){
   const links=[['report','Make a report'],['tracking','Track a report']];
-  if(user){links.push(['desk',user.role==='manager'?'Dashboard':user.role==='officer'?'My work':'Case list']);if(user.role!=='officer')links.push(['outbox','Notifications']);}
+  if(user){links.push(['desk',user.role==='manager'?'Dashboard':user.role==='officer'?'My work':'Cases']);if(user.role!=='officer')links.push(['outbox','Notifications']);}
   else links.push(['login','Staff sign-in']);
   $('#navigation').innerHTML=links.map(([v,l])=>`<button data-view="${v}" class="${view===v?'selected':''}">${l}</button>`).join('')+(user?`<span class="account">${esc(user.name)} · ${esc(user.role)}</span>${button('Sign out','logout','link')}`:'');
 }
-function render(html,focus=true){window.SafeSpotVoice.stop();nav();$('#main').innerHTML=html;if(focus){$('#main').focus({preventScroll:true});window.scrollTo(0,0);}bind();}
+function render(html,focus=true){window.SafeSpotVoice.stop();document.body.classList.toggle('staff-workspace',!!user&&['desk','outbox'].includes(view));nav();$('#main').innerHTML=html;if(focus){$('#main').focus({preventScroll:true});window.scrollTo(0,0);}bind();}
 async function open(next){view=next;message('');if(next==='report')render(reportView());else if(next==='tracking')render(trackingView());else if(next==='login')render(loginView());else if(next==='desk')await loadDesk();else if(next==='outbox')await loadOutbox();}
 function reportView(){
   if(receipt)return receiptView();
@@ -56,7 +58,35 @@ async function loadDesk(){
   render(user.role==='manager'?dashboard():caseQueue());
 }
 function matches(c){const f=filters;return (!f.search||[c.reference,c.report.location,c.report.description].join(' ').toLowerCase().includes(f.search.toLowerCase()))&&(!f.status||c.status===f.status)&&(!f.priority||c.priority===f.priority)&&(!f.officer||(f.officer==='unassigned'?!c.approvals.triage:c.officer_id===f.officer))&&(!f.location||c.report.location===f.location)&&(!f.age||c.report.age_range===f.age)&&(!f.deadline||(f.deadline==='risk'?!c.approvals.field&&c.targets.control_due<now():f.deadline==='review'?!c.approvals.triage&&c.targets.review_due<now():c.riddor_status.action_due));}
-function caseQueue(){const list=cases.filter(matches);return `<p class="eyebrow">${user.role==='officer'?'Field work':'Case management'}</p><div class="title-row"><h1>${user.role==='officer'?'My assigned work':'Reports to review'}</h1>${button('Refresh','refresh','secondary')}</div><form id="filter-form" class="filter-panel">${field('Search reference, location, or description','search',filters.search)}<div class="filters-grid">${select('Status','status',['Needs review','Assigned','Risk controlled','Closed'],filters.status,true)}${select('Priority','priority',priorities,filters.priority,true)}${select('Officer','officer',[['unassigned','Not assigned'],...staff.filter(s=>s.role==='officer').map(s=>[s.id,s.name])],filters.officer,true)}${select('Location','location',[...new Set(cases.map(c=>c.report.location))],filters.location,true)}${select('Deadline','deadline',[['risk','Risk control overdue'],['review','First review overdue'],['riddor','RIDDOR action due']],filters.deadline,true)}${select('Reporter age','age',['Under 18','18 and over','Prefer not to say'],filters.age,true)}</div><div class="actions"><button class="primary" type="submit">Apply filters</button>${button('Clear filters','clear-filters','link')}</div></form><p>${list.length} of ${cases.length} cases</p>${user.role==='officer'?`<div class="task-grid">${list.map(c=>`<article class="task-card"><div class="status-inline">${tag(c.status)}<span>${esc(c.priority)}</span></div><h2>${esc(c.report.location)}</h2><p>${esc(c.report.description)}</p><p>Risk control due: ${dt(c.targets.control_due)}</p><button class="primary" data-case="${c.id}">Open ${esc(c.reference)}</button></article>`).join('')}</div>`:caseTable(list)}${user.role==='handler'?groupView():''}`;}
+function caseFilters(){
+  const extraCount=['status','location','deadline','age'].filter(key=>filters[key]).length;
+  return `<form id="filter-form" class="queue-filters"><div class="queue-toolbar"><div class="field queue-search"><label class="label" for="search">Search cases</label><div class="queue-search-input"><input class="input" id="search" name="search" type="search" value="${esc(filters.search)}" placeholder="Reference, location, or description"><button type="submit" class="queue-search-button" aria-label="Search cases"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 5 5"/></svg></button></div></div>${select('Priority','priority',priorities,filters.priority,true)}${select('Officer','officer',[['unassigned','Not assigned'],...staff.filter(s=>s.role==='officer').map(s=>[s.id,s.name])],filters.officer,true)}<button type="button" class="queue-filter-button" data-action="more-filters" aria-expanded="${moreFiltersOpen}" aria-controls="queue-more"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M3 6h7m4 0h7M3 12h11m4 0h3M3 18h3m4 0h11"/><circle cx="12" cy="6" r="2"/><circle cx="16" cy="12" r="2"/><circle cx="8" cy="18" r="2"/></svg>More filters${extraCount?` <span class="filter-count">${extraCount}</span>`:''}</button></div><div id="queue-more" class="queue-more" ${moreFiltersOpen?'':'hidden'}>${select('Status','status',caseStatuses,filters.status,true)}${select('Location','location',[...new Set(cases.map(c=>c.report.location))],filters.location,true)}${select('Deadline','deadline',[['risk','Risk control overdue'],['review','First review overdue'],['riddor','RIDDOR action due']],filters.deadline,true)}${select('Reporter age','age',['Under 18','18 and over','Prefer not to say'],filters.age,true)}</div></form>`;
+}
+function caseCard(c){
+  const priority=c.priority||'Priority pending';
+  const level=priorities.includes(c.priority)?c.priority.toLowerCase():'pending';
+  const controlled=c.approvals.field;
+  const overdue=!controlled&&c.targets.control_due<now();
+  const deadline=controlled?controlled.at:c.targets.control_due;
+  return `<article class="case-card"><div class="case-card-top"><span class="case-reference">${esc(c.reference)}</span><span class="case-priority priority-${level}">${esc(priority)}</span></div><h3><button type="button" class="case-open" data-case="${c.id}" aria-label="Open ${esc(c.reference)} at ${esc(c.report.location)}">${esc(c.report.location)}</button></h3><p class="case-description">${esc(c.report.description)}</p><div class="case-card-bottom"><span class="case-officer">${esc(c.approvals.triage?officer(c.officer_id):'Not assigned')}</span><span class="case-deadline ${overdue?'is-overdue':''}"><strong>${controlled?'Controlled':overdue?'Overdue':'Control due'}</strong><time datetime="${new Date(deadline*1000).toISOString()}">${dt(deadline)}</time></span></div></article>`;
+}
+function caseBoard(list){
+  return `<div class="board-mobile-control">${select('Show status','board-status',caseStatuses.map(status=>[status,`${status} (${list.filter(c=>c.status===status).length})`]),boardStatus)}</div><div class="case-board">${caseStatuses.map((status,index)=>{const items=list.filter(c=>c.status===status);return `<section class="board-column board-stage-${index} ${boardStatus===status?'is-mobile-active':''}" data-board-status="${status}" aria-labelledby="board-heading-${index}"><div class="board-column-heading"><h2 id="board-heading-${index}">${status}</h2><span class="board-count" aria-label="${items.length} cases">${items.length}</span></div><div class="board-cards">${items.map(caseCard).join('')||'<p class="board-empty">No cases</p>'}</div></section>`;}).join('')}</div>`;
+}
+function caseQueue(){
+  const list=cases.filter(matches),isOfficer=user.role==='officer',activeFilters=Object.values(filters).filter(Boolean).length;
+  const content=isOfficer?`<div class="task-grid">${list.map(c=>`<article class="task-card"><div class="status-inline">${tag(c.status)}<span>${esc(c.priority)}</span></div><h2>${esc(c.report.location)}</h2><p>${esc(c.report.description)}</p><p>Risk control due: ${dt(c.targets.control_due)}</p><button class="primary" data-case="${c.id}">Open ${esc(c.reference)}</button></article>`).join('')}</div>`:queueView==='board'?caseBoard(list):caseTable(list);
+  return `<p class="eyebrow">${isOfficer?'Field work':'Case management'}</p><div class="title-row queue-title"><h1>${isOfficer?'My assigned work':'Cases'}</h1>${button('Refresh','refresh','secondary')}</div>${caseFilters()}<div class="queue-viewbar"><div class="queue-results"><p role="status" aria-live="polite">${list.length} of ${cases.length} cases</p>${activeFilters?button('Clear filters','clear-filters','link'):''}</div>${!isOfficer?`<div class="queue-view-switch" role="group" aria-label="Case view"><button type="button" data-queue-view="board" aria-pressed="${queueView==='board'}">Board</button><button type="button" data-queue-view="list" aria-pressed="${queueView==='list'}">List</button></div>`:''}</div>${list.length?content:'<div class="empty"><h2>No cases match</h2><p>Change or clear the filters.</p></div>'}${user.role==='handler'?`<details class="queue-related"><summary>Related incidents <span>${groups.length} groups</span></summary>${groupView()}</details>`:''}`;
+}
+function filterQueue(form){
+  const focusId=document.activeElement?.id;
+  filters=Object.fromEntries(new FormData(form));
+  const list=cases.filter(matches);
+  if(filters.status)boardStatus=filters.status;
+  else if(!list.some(c=>c.status===boardStatus)&&list.length)boardStatus=list[0].status;
+  render(caseQueue(),false);
+  document.getElementById(focusId||'search')?.focus({preventScroll:true});
+}
 function caseTable(list){return list.length?`<div class="table-wrap"><table><caption class="sr-only">Case records</caption><thead><tr><th>Reference</th><th>Report and location</th><th>Status</th><th>Officer</th><th>Risk control due</th></tr></thead><tbody>${list.map(c=>`<tr><td data-label="Reference"><button class="link" data-case="${c.id}">${esc(c.reference)}</button></td><td data-label="Report"><strong>${esc(c.report.location)}</strong><p>${esc(c.report.description.slice(0,100))}</p></td><td data-label="Status">${tag(c.status)}</td><td data-label="Officer">${esc(c.approvals.triage?officer(c.officer_id):'Not assigned')}</td><td data-label="Due">${c.approvals.field?'Controlled '+dt(c.approvals.field.at):dt(c.targets.control_due)}${!c.approvals.field&&c.targets.control_due<now()?'<p><span class="tag red">Overdue</span></p>':''}</td></tr>`).join('')}</tbody></table></div>`:'<div class="empty"><h2>No cases match</h2><p>Change the filters or refresh the list.</p></div>';}
 function groupView(){return `<section class="section"><h2>Related incidents</h2><p>Confirm whether reports describe the same event or separate recurring incidents. Keep each report available.</p><form id="group-form" class="group-selector"><details><summary>Select reports for review</summary>${cases.slice(0,50).map(c=>`<label class="radio"><input type="checkbox" name="case_ids" value="${c.id}"><span>${esc(c.reference)} · ${esc(c.report.location)}<span class="hint">${esc(c.report.description.slice(0,120))}</span></span></label>`).join('')}</details>${select('Relationship','relationship',[['same_event','Several reports about one event'],['recurring','Separate recurring incidents']])}${field('Reason for this decision','reason','','textarea')}<button class="primary" type="submit">Confirm relationship</button></form>${groups.map(g=>`<article class="panel"><h3>${g.relationship==='recurring'?'Recurring incidents':'Reports about one event'}</h3><p>${esc(g.reason)}</p><div class="case-links">${g.case_ids.map(id=>`<button class="link" data-case="${id}">${esc(cases.find(c=>c.id===id)?.reference||id)}</button>`).join('')}</div><p class="hint">Confirmed by ${esc(g.by)} · ${dt(g.at)}</p><button class="link" data-remove-group="${g.id}">Remove relationship</button></article>`).join('')}</section>`;}
 async function loadCase(id){selected=await api('/cases/'+id);render(caseDetail());}
@@ -79,6 +109,8 @@ async function loadOutbox(){const notes=await api('/notifications');render(`<div
 function saveReport(form){for(const [key,value] of new FormData(form)){if(key in draft)draft[key]=key==='consent'?value==='true':value;}}
 async function changeCase(action,fields={}){selected=await api('/cases/'+selected.id+'/'+action,{method:'POST',body:{version:selected.version,...fields}});render(caseDetail());message('The record is saved.');}
 function bind(){
+  $('#filter-form')?.addEventListener('change',event=>{if(event.target.matches('select'))filterQueue(event.currentTarget);});
+  $('#board-status')?.addEventListener('change',event=>{boardStatus=event.target.value;document.querySelectorAll('.board-column').forEach(column=>column.classList.toggle('is-mobile-active',column.dataset.boardStatus===boardStatus));});
   window.SafeSpotVoice.attach($('#description'),$('#voice-button'),$('#voice-status'),text=>{draft.description=text;});
   $('#description')?.addEventListener('input',event=>{draft.description=event.target.value;});
   document.querySelectorAll('#main form').forEach(form=>form.addEventListener('submit',async event=>{
@@ -91,7 +123,7 @@ function bind(){
         else{receipt=await api('/reports',{method:'POST',body:{...draft,confirmed:true}});render(receiptView());let failed=0;for(const photo of photos){try{const body=new FormData();body.append('file',photo);await api('/cases/'+receipt.id+'/attachments',{method:'POST',headers:{'x-report-reference':receipt.reference},body});}catch{failed++;}}const label=$('#upload-status');if(label)label.textContent=failed?`${failed} images did not upload. Your report is saved. Contact the team with your reference.`:photos.length?'Your images are saved.':'';photos=[];}
       }else if(form.id==='tracking-form'){const result=await api('/tracking',{method:'POST',body:data});render(trackingView(result));$('#reference').value=result.reference;}
       else if(form.id==='login-form'){user=await api('/auth/login',{method:'POST',body:data});await open('desk');}
-      else if(form.id==='filter-form'){filters=data;render(caseQueue(),false);}
+      else if(form.id==='filter-form'){filterQueue(form);}
       else if(form.id==='period-form'){days=Number(data.days);locationFilter='';render(dashboard(),false);}
       else if(form.id==='group-form'){await api('/groups',{method:'POST',body:{...data,case_ids:new FormData(form).getAll('case_ids')}});await loadDesk();message('The relationship is recorded.');}
       else if(form.id==='evidence-form'){const body=new FormData();body.append('file',$('#evidence-file').files[0]);selected=await api('/cases/'+selected.id+'/attachments',{method:'POST',body});render(caseDetail());message('The image is saved. Review the case approvals.');}
@@ -103,6 +135,7 @@ function bind(){
 document.addEventListener('click',async event=>{
   const b=event.target.closest('button');if(!b||(b.type==='submit'&&b.form)||b.disabled)return;
   try{
+    if(b.dataset.queueView){queueView=b.dataset.queueView;render(caseQueue(),false);document.querySelector(`[data-queue-view="${queueView}"]`)?.focus({preventScroll:true});return;}
     if(b.dataset.view){await open(b.dataset.view);return;}
     if(b.dataset.case){if(!staff.length)staff=await api('/staff');await loadCase(b.dataset.case);return;}
     if(b.dataset.editReport){step=['name','email'].includes(b.dataset.editReport)?steps.indexOf('contact'):steps.indexOf(b.dataset.editReport);render(reportView());return;}
@@ -117,7 +150,8 @@ document.addEventListener('click',async event=>{
     if(action==='download-receipt'){const blob=new Blob([`Safe Spot\nReference: ${receipt.reference}\nTrack at ${location.origin}\n`],{type:'text/plain'});const link=document.createElement('a');link.href=URL.createObjectURL(blob);link.download=receipt.reference+'.txt';link.click();setTimeout(()=>URL.revokeObjectURL(link.href),1000);}
     if(action==='logout'){await api('/auth/logout',{method:'POST'});user=null;staff=[];cases=[];selected=null;await open('report');}
     if(action==='refresh'||action==='back-desk')await open('desk');
-    if(action==='clear-filters'){Object.keys(filters).forEach(k=>filters[k]='');render(caseQueue());}
+    if(action==='more-filters'){moreFiltersOpen=!moreFiltersOpen;$('#queue-more').hidden=!moreFiltersOpen;b.setAttribute('aria-expanded',String(moreFiltersOpen));}
+    if(action==='clear-filters'){Object.keys(filters).forEach(k=>filters[k]='');boardStatus='Needs review';render(caseQueue(),false);$('#search')?.focus({preventScroll:true});}
     if(action==='all-locations'){locationFilter='';render(dashboard(),false);}
     if(action==='use-ai'){const s=selected.ai.suggestions;if(categories.includes(s.category))$('#category').value=s.category;if(priorities.includes(s.priority))$('#priority').value=s.priority;message('Suggested values are selected. Review them before approval.');}
     if(action==='retry-ai')await changeCase('ai/retry');
