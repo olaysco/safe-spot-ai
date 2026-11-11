@@ -37,7 +37,7 @@ function reportView(){
   if(receipt)return receiptView();
   const key=steps[step];
   const titles={description:'Tell us what happened',consent:'Would you like AI assistance?',location:'Where did it happen?',time:'When did it happen?',harm:'Was anyone hurt?',remains:'Is the hazard still there?',age_range:'Which age group are you in?',contact:'Contact and photos',review:'Check your report'};
-  const hints={description:'Describe what you saw. You do not need a technical category.',location:'Use a building, entrance, room, or nearby sign. A map is not required.',time:'Give a date and time, or your best estimate. You can enter Not sure.',harm:'Describe any harm. You can enter Nobody was hurt or Not sure.',remains:'Tell us what remains. You can enter Not sure.'};
+  const hints={description:'Describe what you saw.',location:'Use a building, entrance, room, or nearby sign. A map is not required.',time:'Give a date and time, or your best estimate. You can enter Not sure.',harm:'Describe any harm. You can enter Nobody was hurt or Not sure.',remains:'Tell us what remains. You can enter Not sure.'};
   let content='';
   if(hints[key])content=field(titles[key],key,draft[key],'textarea',hints[key]);
   if(key==='description')content+=`<div class="voice-input">${button('Use voice input','voice','secondary','id="voice-button" aria-pressed="false" aria-describedby="voice-help voice-status"')}<p id="voice-help" class="hint">Your browser may send audio to its speech service. Check and edit the text before you continue.</p><p id="voice-status" role="status" aria-live="polite"></p></div>`;
