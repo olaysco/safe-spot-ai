@@ -23,6 +23,49 @@ People review the evidence and approve each critical decision.
 AI features require a connected model service.
 Manual reporting and case management remain available without AI.
 
+## Architecture
+
+The diagram shows the Azure deployment defined in this repository.
+
+```mermaid
+flowchart TB
+    accTitle: Safe Spot platform architecture
+    accDescr: Reporters and staff use a web interface. The application and scheduled worker share PostgreSQL. AI and email connections are optional.
+
+    reporters["Reporters<br/>Submit and track reports"]
+    staff["Case handlers, field officers, and managers<br/>Review evidence and approve actions"]
+    browser["Browser interface<br/>HTML, CSS, JavaScript, and voice input"]
+
+    subgraph azure["Azure platform"]
+        subgraph compute["Azure Container Apps"]
+            web["FastAPI web app<br/>Access checks and case management"]
+            worker["Scheduled worker<br/>Triage and notification checks every five minutes"]
+        end
+        database[("PostgreSQL<br/>Cases, approvals, jobs, and notification outbox")]
+        evidence[("Private Blob Storage<br/>Evidence images")]
+    end
+
+    subgraph optional["Optional connections"]
+        decision["Microsoft-Decision-1<br/>Category and priority suggestions"]
+        textmodel["Text model<br/>Report assistance, drafts, and summaries"]
+        email["SMTP service<br/>Manager alerts and reporter outcomes"]
+    end
+
+    reporters --> browser
+    staff --> browser
+    browser <-->|HTTPS| web
+    web <--> database
+    web <-->|Managed identity| evidence
+    worker <--> database
+    worker -.-> decision
+    web -.-> textmodel
+    worker -.-> email
+```
+
+Staff review AI suggestions and approve critical actions through the web interface.
+Dashed lines show optional connections; the Azure configuration leaves AI disconnected and captures email in the application outbox.
+Azure Developer CLI and Bicep deploy both services from images built in Azure Container Registry.
+
 ## Deployment
 
 ### Run locally
