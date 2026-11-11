@@ -79,6 +79,8 @@ def create_app(database_url=None, worker=True):
         response.headers['Content-Security-Policy'] = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' blob: data:; connect-src 'self'; object-src 'none'; frame-ancestors 'none'; base-uri 'self'"
         if request.url.path.startswith('/api'):
             response.headers['Cache-Control'] = 'no-store'
+        elif request.url.path == '/' or request.url.path.startswith('/static/'):
+            response.headers['Cache-Control'] = 'no-cache'
         return response
 
     @app.exception_handler(StaleDataError)

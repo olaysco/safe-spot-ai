@@ -6,6 +6,7 @@ mockup/*
 __pycache__/
 .pytest_cache/
 .local/
+.lavish/
 *.db
 *.db-shm
 *.db-wal
