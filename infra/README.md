@@ -107,26 +107,34 @@ Voice input continues to use browser speech recognition.
 
 ## Enable email
 
-Set the manager address and enable Azure Email:
+Use a sender domain verified in your ZeptoMail account.
+Copy the full email API URL from the SMTP/API page.
+The URL must match your account region.
+Add these settings to `.local/zeptomail.env`:
 
-```sh
-azd env set SAFE_SPOT_MANAGER_EMAIL manager@example.com
-azd env set SAFE_SPOT_EMAIL_ENABLED true
-azd provision --preview
-azd up
+```dotenv
+ZEPTOMAIL_API_URL="YOUR_FULL_EMAIL_API_URL"
+ZEPTOMAIL_FROM="notifications@your-domain.com"
+ZEPTOMAIL_API_KEY="YOUR_SEND_MAIL_TOKEN"
+SAFE_SPOT_MANAGER_EMAIL="manager@example.com"
 ```
 
-Replace `manager@example.com` with the address for manager alerts.
-Bicep creates an Azure-managed sender domain and grants the application identity access to send email.
-The worker sends report receipts, approved outcomes, and manager alerts.
-It checks the queue every five minutes.
-Existing captured messages remain in the demonstration outbox.
+Import the settings and deploy both services:
 
-Azure-managed domains permit [10 emails per hour](https://learn.microsoft.com/en-us/azure/communication-services/concepts/service-limits#rate-limits-for-email).
-Additional messages stay queued.
-The outbox records send status; it does not confirm inbox receipt.
-Azure charges for email use.
-Azure Email [retires on 30 September 2028](https://learn.microsoft.com/en-us/azure/communication-services/acs-retirement-and-breaking-changes-guide#acs-email).
+```sh
+chmod 600 .local/zeptomail.env
+azd env set --file .local/zeptomail.env
+azd deploy --all
+```
+
+Git excludes `.local/`.
+Bicep stores the API key in a Container Apps secret for the worker.
+The web container does not receive the API key.
+
+The worker sends receipts, approved outcomes, and manager alerts every five minutes.
+Existing captured messages remain in the demonstration outbox.
+The outbox records provider acceptance; it does not confirm inbox receipt.
+The worker does not repeat requests with an unknown result.
 
 ## Resources and costs
 
@@ -139,9 +147,9 @@ Azure Email [retires on 30 September 2028](https://learn.microsoft.com/en-us/azu
 | Image registry | Standard Container Registry; separate remote builds for web and worker |
 | Network and access | Separate subnets, private database DNS, and managed identity |
 | AI, when enabled | GPT-5-mini; Global Standard; capacity 10; managed identity access |
-| Email, when enabled | Azure Communication Services; managed sender domain; managed identity access |
+| Email, when enabled | Zoho ZeptoMail API; verified sender domain; worker secret |
 
-Email stays in capture mode until the email service and manager address are configured.
+Email stays in capture mode until the ZeptoMail settings and manager address are configured.
 AI stays disabled until `SAFE_SPOT_AI_ENABLED` is set to `true`.
 Free allowances depend on your subscription and usage.
 Image builds, networking, and other resources can incur charges.

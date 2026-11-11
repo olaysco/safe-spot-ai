@@ -42,13 +42,16 @@
       "value": "${AZURE_AI_TEXT_DEPLOYMENT=}"
     },
     "emailEndpoint": {
-      "value": "${AZURE_EMAIL_ENDPOINT=}"
+      "value": "${ZEPTOMAIL_API_URL=}"
     },
     "emailSender": {
-      "value": "${AZURE_EMAIL_FROM=}"
+      "value": "${ZEPTOMAIL_FROM=}"
     },
     "managerEmail": {
       "value": "${SAFE_SPOT_MANAGER_EMAIL=}"
+    },
+    "emailApiKey": {
+      "value": "${ZEPTOMAIL_API_KEY=}"
     }
   }
 }

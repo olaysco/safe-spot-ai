@@ -31,7 +31,7 @@ The diagram shows the Azure deployment defined in this repository.
 
 Staff approve critical actions.
 Dashed lines show optional AI and email connections.
-The Azure configuration supports optional GPT-5-mini and Azure Email connections.
+The Azure configuration supports optional GPT-5-mini and Zoho ZeptoMail connections.
 
 [Text diagram](docs/architecture/safe-spot.mmd)
 
@@ -55,7 +55,7 @@ Demo staff accounts are saved in `.local/demo-accounts.txt`.
 Local deployments use SQLite and local image storage.
 Configure the model and email connections through the environment variables in [.env.example](.env.example).
 The server reads exported environment variables; it does not load `.env` automatically.
-Email remains in the application outbox until Azure Email or SMTP delivery is enabled.
+Email remains in the application outbox until Zoho ZeptoMail or SMTP delivery is enabled.
 
 ### Deploy to Azure
 

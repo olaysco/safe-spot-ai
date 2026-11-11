@@ -15,11 +15,18 @@ param emailEndpoint string = ''
 param emailSender string = ''
 param managerEmail string = ''
 @secure()
+param emailApiKey string = ''
+@secure()
 param databaseUrl string
 
 var identity = { type: 'UserAssigned', userAssignedIdentities: { '${identityId}': {} } }
 var registry = { server: registryEndpoint, identity: identityId }
-var secrets = [{ name: 'database-url', value: databaseUrl }]
+var emailEnabled = !empty(emailEndpoint) && !empty(emailSender) && !empty(managerEmail) && !empty(emailApiKey)
+var emailSecrets = serviceKind == 'worker' && emailEnabled ? [{ name: 'zeptomail-api-key', value: emailApiKey }] : []
+var secrets = concat([{ name: 'database-url', value: databaseUrl }], emailSecrets)
+var emailVariables = serviceKind == 'worker' && emailEnabled ? [
+  { name: 'ZEPTOMAIL_API_KEY', secretRef: 'zeptomail-api-key' }
+] : []
 var aiVariables = empty(aiEndpoint) ? [] : [
   { name: 'TEXT_AI_BASE_URL', value: aiEndpoint }
   { name: 'TEXT_AI_MODEL', value: aiTextDeployment }
@@ -30,15 +37,15 @@ var variables = concat([
   { name: 'PUBLIC_ORIGIN', value: appUrl }
   { name: 'COOKIE_SECURE', value: 'true' }
   { name: 'WORKER_ENABLED', value: 'false' }
-  { name: 'EMAIL_MODE', value: !empty(emailEndpoint) && !empty(emailSender) && !empty(managerEmail) ? 'azure' : 'capture' }
-  { name: 'AZURE_EMAIL_ENDPOINT', value: emailEndpoint }
-  { name: 'AZURE_EMAIL_FROM', value: emailSender }
+  { name: 'EMAIL_MODE', value: emailEnabled ? 'zeptomail' : 'capture' }
+  { name: 'ZEPTOMAIL_API_URL', value: emailEndpoint }
+  { name: 'ZEPTOMAIL_FROM', value: emailSender }
   { name: 'MANAGER_EMAIL', value: empty(managerEmail) ? 'manager@example.test' : managerEmail }
   { name: 'STORAGE_BACKEND', value: 'azure' }
   { name: 'AZURE_STORAGE_ACCOUNT_URL', value: storageUrl }
   { name: 'AZURE_STORAGE_CONTAINER', value: 'evidence' }
   { name: 'AZURE_CLIENT_ID', value: identityClientId }
-], aiVariables)
+], aiVariables, emailVariables)
 resource app 'Microsoft.App/containerApps@2025-01-01' = if (serviceKind == 'web') {
   name: '${name}-web'
   location: location
