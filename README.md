@@ -47,37 +47,61 @@ Email remains in the application outbox until SMTP delivery is enabled.
 
 ### Deploy to Azure
 
-The Bicep templates create Container Apps hosting, PostgreSQL, private Blob Storage, Container Registry, and a scheduled worker.
+Azure Developer CLI (`azd`) builds and deploys Safe Spot.
+Bicep defines Container Apps hosting, PostgreSQL, private Blob Storage, Container Registry, and a scheduled worker.
 
-**1. Install Azure CLI and sign in.**
+**1. Install the Azure tools.**
 
-Follow the [Azure CLI installation instructions](https://learn.microsoft.com/en-us/cli/azure/install-azure-cli-macos).
+Install [Azure Developer CLI](https://learn.microsoft.com/en-us/azure/developer/azure-developer-cli/install-azd) version 1.37.3 or later.
+Install [Azure CLI](https://learn.microsoft.com/en-us/cli/azure/install-azure-cli-macos) for staff account administration.
 
-```sh
-az login
-az account list --output table
-az bicep install
-```
-
-**2. Preview the infrastructure.**
-
-Replace `YOUR_SUBSCRIPTION_ID` with your Azure subscription ID.
+**2. Set the deployment environment.**
 
 ```sh
-python3 scripts/azure.py plan --subscription YOUR_SUBSCRIPTION_ID --location uksouth
+azd auth login
+azd env new safespot --location uksouth
 ```
 
-**3. Deploy the application.**
+Select your Azure subscription when prompted.
+Open `.azure/safespot/.env` in your editor.
+Add this setting with a unique database password:
+
+```dotenv
+AZURE_POSTGRES_PASSWORD="REPLACE_WITH_YOUR_DATABASE_PASSWORD"
+```
+
+Use at least 20 characters, with uppercase letters, lowercase letters, numbers, and `!` or `-`.
+Keep this password for subsequent deployments.
+Git excludes the `.azure` directory.
+
+**3. Preview and deploy.**
+
+Preview the shared infrastructure:
 
 ```sh
-python3 scripts/azure.py deploy --subscription YOUR_SUBSCRIPTION_ID --location uksouth
+azd provision --preview
 ```
 
-The script builds the container image, deploys the services, and prints the application URL.
+After you check the preview, deploy the application:
+
+```sh
+azd up
+```
+
+This command creates Azure resources, builds both services, and prints the application URL.
+Azure charges can apply.
+The preview covers shared resources; deployment also creates the web app and worker.
 
 **4. Create staff accounts.**
 
 Open the application URL to start the web service.
+Sign in to Azure CLI:
+
+```sh
+az login
+```
+
+Replace `YOUR_SUBSCRIPTION_ID` with the subscription ID selected for `azd`.
 Run this command for each staff account.
 
 ```sh
@@ -89,5 +113,15 @@ az containerapp exec \
 ```
 
 Enter the staff name, email, role, and password when prompted.
+
+**5. Deploy updates.**
+
+For application changes, run:
+
+```sh
+azd deploy --all
+```
+
+For shared infrastructure changes, repeat the preview and `azd up` commands.
 
 See the [Azure deployment guide](infra/README.md) for permissions, configuration, and cost details.
