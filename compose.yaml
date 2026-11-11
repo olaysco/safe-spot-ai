@@ -1,0 +1,31 @@
+services:
+  app:
+    build: .
+    ports:
+      - "127.0.0.1:8000:8000"
+    environment:
+      DATABASE_URL: postgresql+psycopg://safespot:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}@db:5432/safespot
+      PUBLIC_ORIGIN: ${PUBLIC_ORIGIN:-http://127.0.0.1:8000}
+      COOKIE_SECURE: ${COOKIE_SECURE:-false}
+      EMAIL_MODE: capture
+    volumes:
+      - app_data:/srv/safespot/.local
+    depends_on:
+      db:
+        condition: service_healthy
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: safespot
+      POSTGRES_USER: safespot
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+    volumes:
+      - database:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U safespot"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+volumes:
+  app_data:
+  database:
