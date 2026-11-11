@@ -9,13 +9,20 @@ param identityId string
 param identityClientId string
 param registryEndpoint string
 param storageUrl string
+param aiEndpoint string = ''
+param aiTextDeployment string = ''
 @secure()
 param databaseUrl string
 
 var identity = { type: 'UserAssigned', userAssignedIdentities: { '${identityId}': {} } }
 var registry = { server: registryEndpoint, identity: identityId }
 var secrets = [{ name: 'database-url', value: databaseUrl }]
-var variables = [
+var aiVariables = empty(aiEndpoint) ? [] : [
+  { name: 'TEXT_AI_BASE_URL', value: aiEndpoint }
+  { name: 'TEXT_AI_MODEL', value: aiTextDeployment }
+  { name: 'TEXT_AI_AUTH_MODE', value: 'entra' }
+]
+var variables = concat([
   { name: 'DATABASE_URL', secretRef: 'database-url' }
   { name: 'PUBLIC_ORIGIN', value: appUrl }
   { name: 'COOKIE_SECURE', value: 'true' }
@@ -25,7 +32,7 @@ var variables = [
   { name: 'AZURE_STORAGE_ACCOUNT_URL', value: storageUrl }
   { name: 'AZURE_STORAGE_CONTAINER', value: 'evidence' }
   { name: 'AZURE_CLIENT_ID', value: identityClientId }
-]
+], aiVariables)
 resource app 'Microsoft.App/containerApps@2025-01-01' = if (serviceKind == 'web') {
   name: '${name}-web'
   location: location

@@ -4,6 +4,8 @@ targetScope = 'subscription'
 @maxLength(15)
 param name string = 'safespot'
 param location string = 'uksouth'
+@allowed(['true', 'false'])
+param enableAI string = 'false'
 @secure()
 @minLength(20)
 param databasePassword string
@@ -24,6 +26,7 @@ module resources './resources.bicep' = {
     name: name
     location: location
     databasePassword: databasePassword
+    enableAI: enableAI == 'true'
   }
 }
 
@@ -35,3 +38,5 @@ output AZURE_IDENTITY_CLIENT_ID string = resources.outputs.identityClientId
 output AZURE_STORAGE_ACCOUNT_URL string = resources.outputs.storageUrl
 output AZURE_POSTGRES_HOST string = resources.outputs.databaseHost
 output SERVICE_WEB_URI string = resources.outputs.appUrl
+output AZURE_AI_ENDPOINT string = resources.outputs.aiEndpoint
+output AZURE_AI_TEXT_DEPLOYMENT string = resources.outputs.aiTextDeployment

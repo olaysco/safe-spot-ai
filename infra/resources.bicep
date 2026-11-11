@@ -1,5 +1,6 @@
 param name string
 param location string
+param enableAI bool = false
 @secure()
 param databasePassword string
 
@@ -138,6 +139,15 @@ resource environment 'Microsoft.App/managedEnvironments@2025-01-01' = {
   }
 }
 
+module ai './ai.bicep' = if (enableAI) {
+  name: '${name}-ai'
+  params: {
+    name: name
+    location: location
+    identityPrincipalId: identity.properties.principalId
+  }
+}
+
 output registryName string = registry.name
 output registryEndpoint string = registry.properties.loginServer
 output appName string = appName
@@ -147,3 +157,5 @@ output identityId string = identity.id
 output identityClientId string = identity.properties.clientId
 output storageUrl string = storage.properties.primaryEndpoints.blob
 output databaseHost string = database.properties.fullyQualifiedDomainName
+output aiEndpoint string = enableAI ? ai!.outputs.endpoint : ''
+output aiTextDeployment string = enableAI ? ai!.outputs.textDeployment : ''

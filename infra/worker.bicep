@@ -8,6 +8,8 @@ param identityClientId string
 param registryEndpoint string
 param storageUrl string
 param databaseHost string
+param aiEndpoint string = ''
+param aiTextDeployment string = ''
 @secure()
 @minLength(20)
 param databasePassword string
@@ -25,6 +27,8 @@ module runtime './runtime.bicep' = {
     identityClientId: identityClientId
     registryEndpoint: registryEndpoint
     storageUrl: storageUrl
+    aiEndpoint: aiEndpoint
+    aiTextDeployment: aiTextDeployment
     databaseUrl: 'postgresql+psycopg://safespotadmin:${uriComponent(databasePassword)}@${databaseHost}:5432/safespot?sslmode=require'
   }
 }

@@ -10,6 +10,9 @@
     },
     "databasePassword": {
       "value": "${AZURE_POSTGRES_PASSWORD}"
+    },
+    "enableAI": {
+      "value": "${SAFE_SPOT_AI_ENABLED=false}"
     }
   }
 }
