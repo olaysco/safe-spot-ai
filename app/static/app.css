@@ -7,6 +7,10 @@ body>main{flex:1 0 auto;min-height:0}
 .ai-heading{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:12px}
 .ai-heading h3{margin:0}
 .ai-heading svg{width:24px;height:24px;flex:none;color:var(--blue)}
+.ui-icon{display:inline-block;flex:none;vertical-align:middle}
+.icon-button{display:inline-grid;place-items:center;width:44px;height:44px;flex:none;padding:0;border:1px solid #d6dde2;border-radius:6px;background:white;color:var(--ink)}
+.icon-button:focus-visible{outline:3px solid var(--yellow);outline-offset:2px}
+@media(hover:hover){.icon-button:hover{background:#e8edef;border-color:#859096}}
 body.staff-workspace .container{max-width:none;width:100%;padding-inline:clamp(16px,2.5vw,64px)}
 body.case-workspace-page{background:#f4f5f6}
 .case-workspace{--board-line:#d6dde2;--board-muted:#52616b;--board-green:#2d5c52}
