@@ -13,7 +13,6 @@ param aiEndpoint string = ''
 param aiTextDeployment string = ''
 param emailEndpoint string = ''
 param emailSender string = ''
-param managerEmail string = ''
 @secure()
 param emailApiKey string = ''
 @secure()
@@ -21,7 +20,7 @@ param databaseUrl string
 
 var identity = { type: 'UserAssigned', userAssignedIdentities: { '${identityId}': {} } }
 var registry = { server: registryEndpoint, identity: identityId }
-var emailEnabled = !empty(emailEndpoint) && !empty(emailSender) && !empty(managerEmail) && !empty(emailApiKey)
+var emailEnabled = !empty(emailEndpoint) && !empty(emailSender) && !empty(emailApiKey)
 var emailSecrets = serviceKind == 'worker' && emailEnabled ? [{ name: 'zeptomail-api-key', value: emailApiKey }] : []
 var secrets = concat([{ name: 'database-url', value: databaseUrl }], emailSecrets)
 var emailVariables = serviceKind == 'worker' && emailEnabled ? [
@@ -40,7 +39,6 @@ var variables = concat([
   { name: 'EMAIL_MODE', value: emailEnabled ? 'zeptomail' : 'capture' }
   { name: 'ZEPTOMAIL_API_URL', value: emailEndpoint }
   { name: 'ZEPTOMAIL_FROM', value: emailSender }
-  { name: 'MANAGER_EMAIL', value: empty(managerEmail) ? 'manager@example.test' : managerEmail }
   { name: 'STORAGE_BACKEND', value: 'azure' }
   { name: 'AZURE_STORAGE_ACCOUNT_URL', value: storageUrl }
   { name: 'AZURE_STORAGE_CONTAINER', value: 'evidence' }

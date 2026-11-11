@@ -47,9 +47,6 @@
     "emailSender": {
       "value": "${ZEPTOMAIL_FROM=}"
     },
-    "managerEmail": {
-      "value": "${SAFE_SPOT_MANAGER_EMAIL=}"
-    },
     "emailApiKey": {
       "value": "${ZEPTOMAIL_API_KEY=}"
     }

@@ -7,8 +7,8 @@ import pytest
 import httpx
 
 from app import mail
-from app.database import Case, Limit, Notification, connect
-from app.worker import deliver
+from app.database import Case, Limit, Notification, User, connect
+from app.worker import add_notification, deliver
 
 
 @pytest.fixture
@@ -69,6 +69,38 @@ def test_delivery_keeps_captured_mail_and_cancels_unapproved_outcomes(email_syst
         assert db.get(Notification, captured).state == 'captured'
         assert db.get(Notification, cancelled).state == 'cancelled'
     assert sent == []
+
+
+def test_manager_alerts_wait_for_accounts_and_use_current_roles(email_system, monkeypatch):
+    factory, sent = email_system
+    monkeypatch.setenv('MANAGER_EMAIL', 'old-setting@example.test')
+    with factory() as db:
+        add_notification(db, 'manager-test', 'Manager test', 'A test message.')
+        db.commit()
+        note = db.query(Notification).filter_by(key='manager-test').one()
+        note_id = note.id
+    deliver(factory)
+    with factory() as db:
+        assert db.get(Notification, note_id).state == 'recorded'
+        assert sent == []
+        former = User(name='Former manager', email='former@example.test', role='manager', password='unused')
+        db.add(former)
+        db.flush()
+        add_notification(db, 'another-manager-test', 'Another test', 'A test message.')
+        former.role = 'handler'
+        db.add_all([
+            User(name='First manager', email='first@example.test', role='manager', password='unused'),
+            User(name='Second manager', email='second@example.test', role='manager', password='unused'),
+            User(name='Officer', email='officer@example.test', role='officer', password='unused'),
+        ])
+        db.commit()
+    deliver(factory)
+    with factory() as db:
+        for note in db.query(Notification).all():
+            assert note.state == 'sent'
+            assert note.data['recipients'] == ['first@example.test', 'second@example.test']
+            assert note.data['recipient'] == 'first@example.test, second@example.test'
+    assert len(sent) == 2
 
 
 def test_provider_throttle_pauses_the_queue(email_system, monkeypatch):
@@ -147,8 +179,13 @@ def test_zeptomail_request_uses_the_configured_sender_and_token(monkeypatch):
     assert payload['client_reference'] == note.id
     assert payload['track_opens'] is False and payload['track_clicks'] is False
     monkeypatch.setenv('ZEPTOMAIL_API_KEY', 'Zoho-enczapikey test-token')
+    note.data['recipients'] = ['first@example.test', 'second@example.test']
     mail.send_zeptomail(note)
     assert requests[-1].headers['Authorization'] == 'Zoho-enczapikey test-token'
+    assert json.loads(requests[-1].content)['to'] == [
+        {'email_address': {'address': 'first@example.test'}},
+        {'email_address': {'address': 'second@example.test'}},
+    ]
     monkeypatch.setenv('ZEPTOMAIL_API_URL', 'http://api.zeptomail.eu/v1.1/email')
     with pytest.raises(ValueError):
         mail.send_zeptomail(note)

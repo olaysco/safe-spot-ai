@@ -10,15 +10,20 @@ from sqlalchemy import or_, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm.exc import StaleDataError
 from app import ai, mail
-from app.database import Case, Group, Job, Limit, Notification
+from app.database import Case, Group, Job, Limit, Notification, User
 from app.domain import targets
+
+
+def manager_recipients(db):
+    return sorted({email.lower() for email in db.scalars(select(User.email).where(User.role == 'manager'))})
 
 
 def add_notification(db, key, subject, body, case_ids=None, recipient=None, kind='manager'):
     if db.scalar(select(Notification).where(Notification.key == key)):
         return
+    recipients = manager_recipients(db) if kind == 'manager' else [recipient]
     db.add(Notification(key=key, data={'subject': subject, 'body': body,
-        'recipient': recipient or os.getenv('MANAGER_EMAIL', 'manager@example.test'),
+        'recipient': ', '.join(recipients) if recipients else 'No manager account', 'recipients': recipients,
         'case_ids': case_ids or [], 'kind': kind, 'acknowledged': None}))
 
 
@@ -124,6 +129,12 @@ def deliver(factory):
                 approved = case.data['approvals'].get('response') if case else None
                 if not approved or note.key != f'outcome:{case.id}:{approved["at"]}':
                     note.state = 'cancelled'
+                    continue
+            if note.data.get('kind') == 'manager':
+                recipients = manager_recipients(db)
+                note.data = {**note.data, 'recipients': recipients,
+                             'recipient': ', '.join(recipients) if recipients else 'No manager account'}
+                if not recipients:
                     continue
             if mode == 'capture':
                 note.state = 'captured'

@@ -116,7 +116,6 @@ Add these settings to `.local/zeptomail.env`:
 ZEPTOMAIL_API_URL="YOUR_FULL_EMAIL_API_URL"
 ZEPTOMAIL_FROM="notifications@your-domain.com"
 ZEPTOMAIL_API_KEY="YOUR_SEND_MAIL_TOKEN"
-SAFE_SPOT_MANAGER_EMAIL="manager@example.com"
 ```
 
 Import the settings and deploy both services:
@@ -132,6 +131,8 @@ Bicep stores the API key in a Container Apps secret for the worker.
 The web container does not receive the API key.
 
 The worker sends receipts, approved outcomes, and manager alerts every five minutes.
+Manager alerts go to the email addresses of current manager accounts in Safe Spot.
+Alerts stay queued if no manager account exists.
 Existing captured messages remain in the demonstration outbox.
 The outbox records provider acceptance; it does not confirm inbox receipt.
 The worker does not repeat requests with an unknown result.
@@ -149,7 +150,7 @@ The worker does not repeat requests with an unknown result.
 | AI, when enabled | GPT-5-mini; Global Standard; capacity 10; managed identity access |
 | Email, when enabled | Zoho ZeptoMail API; verified sender domain; worker secret |
 
-Email stays in capture mode until the ZeptoMail settings and manager address are configured.
+Email stays in capture mode until the ZeptoMail settings are configured.
 AI stays disabled until `SAFE_SPOT_AI_ENABLED` is set to `true`.
 Free allowances depend on your subscription and usage.
 Image builds, networking, and other resources can incur charges.

@@ -16,7 +16,8 @@ def send_zeptomail(note):
         token = 'Zoho-enczapikey ' + token
     message = {
         'from': {'address': sender, 'name': 'Safe Spot'},
-        'to': [{'email_address': {'address': note.data['recipient']}}],
+        'to': [{'email_address': {'address': address}}
+               for address in note.data.get('recipients', [note.data['recipient']])],
         'subject': note.data['subject'],
         'textbody': note.data['body'],
         'client_reference': note.id,
