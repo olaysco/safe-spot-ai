@@ -11,6 +11,9 @@ param registryEndpoint string
 param storageUrl string
 param aiEndpoint string = ''
 param aiTextDeployment string = ''
+param emailEndpoint string = ''
+param emailSender string = ''
+param managerEmail string = ''
 @secure()
 param databaseUrl string
 
@@ -27,7 +30,10 @@ var variables = concat([
   { name: 'PUBLIC_ORIGIN', value: appUrl }
   { name: 'COOKIE_SECURE', value: 'true' }
   { name: 'WORKER_ENABLED', value: 'false' }
-  { name: 'EMAIL_MODE', value: 'capture' }
+  { name: 'EMAIL_MODE', value: !empty(emailEndpoint) && !empty(emailSender) && !empty(managerEmail) ? 'azure' : 'capture' }
+  { name: 'AZURE_EMAIL_ENDPOINT', value: emailEndpoint }
+  { name: 'AZURE_EMAIL_FROM', value: emailSender }
+  { name: 'MANAGER_EMAIL', value: empty(managerEmail) ? 'manager@example.test' : managerEmail }
   { name: 'STORAGE_BACKEND', value: 'azure' }
   { name: 'AZURE_STORAGE_ACCOUNT_URL', value: storageUrl }
   { name: 'AZURE_STORAGE_CONTAINER', value: 'evidence' }

@@ -1,6 +1,7 @@
 param name string
 param location string
 param enableAI bool = false
+param enableEmail bool = false
 @secure()
 param databasePassword string
 
@@ -148,6 +149,14 @@ module ai './ai.bicep' = if (enableAI) {
   }
 }
 
+module email './email.bicep' = if (enableEmail) {
+  name: '${name}-email'
+  params: {
+    name: name
+    identityPrincipalId: identity.properties.principalId
+  }
+}
+
 output registryName string = registry.name
 output registryEndpoint string = registry.properties.loginServer
 output appName string = appName
@@ -159,3 +168,5 @@ output storageUrl string = storage.properties.primaryEndpoints.blob
 output databaseHost string = database.properties.fullyQualifiedDomainName
 output aiEndpoint string = enableAI ? ai!.outputs.endpoint : ''
 output aiTextDeployment string = enableAI ? ai!.outputs.textDeployment : ''
+output emailEndpoint string = enableEmail ? email!.outputs.endpoint : ''
+output emailSender string = enableEmail ? email!.outputs.sender : ''

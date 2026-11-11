@@ -6,6 +6,8 @@ param name string = 'safespot'
 param location string = 'uksouth'
 @allowed(['true', 'false'])
 param enableAI string = 'false'
+@allowed(['true', 'false'])
+param enableEmail string = 'false'
 @secure()
 @minLength(20)
 param databasePassword string
@@ -27,6 +29,7 @@ module resources './resources.bicep' = {
     location: location
     databasePassword: databasePassword
     enableAI: enableAI == 'true'
+    enableEmail: enableEmail == 'true'
   }
 }
 
@@ -40,3 +43,5 @@ output AZURE_POSTGRES_HOST string = resources.outputs.databaseHost
 output SERVICE_WEB_URI string = resources.outputs.appUrl
 output AZURE_AI_ENDPOINT string = resources.outputs.aiEndpoint
 output AZURE_AI_TEXT_DEPLOYMENT string = resources.outputs.aiTextDeployment
+output AZURE_EMAIL_ENDPOINT string = resources.outputs.emailEndpoint
+output AZURE_EMAIL_FROM string = resources.outputs.emailSender

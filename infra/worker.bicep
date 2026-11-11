@@ -10,6 +10,9 @@ param storageUrl string
 param databaseHost string
 param aiEndpoint string = ''
 param aiTextDeployment string = ''
+param emailEndpoint string = ''
+param emailSender string = ''
+param managerEmail string = ''
 @secure()
 @minLength(20)
 param databasePassword string
@@ -29,6 +32,9 @@ module runtime './runtime.bicep' = {
     storageUrl: storageUrl
     aiEndpoint: aiEndpoint
     aiTextDeployment: aiTextDeployment
+    emailEndpoint: emailEndpoint
+    emailSender: emailSender
+    managerEmail: managerEmail
     databaseUrl: 'postgresql+psycopg://safespotadmin:${uriComponent(databasePassword)}@${databaseHost}:5432/safespot?sslmode=require'
   }
 }

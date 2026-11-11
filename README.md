@@ -30,8 +30,8 @@ The diagram shows the Azure deployment defined in this repository.
 [![Safe Spot architecture with Azure service icons, human review, shared storage, and optional AI and email connections.](docs/architecture/safe-spot.svg)](docs/architecture/safe-spot.svg)
 
 Staff approve critical actions.
-Dashed lines show optional AI and SMTP connections.
-The Azure configuration supports one optional GPT-5-mini deployment and captures email in the application outbox.
+Dashed lines show optional AI and email connections.
+The Azure configuration supports optional GPT-5-mini and Azure Email connections.
 
 [Text diagram](docs/architecture/safe-spot.mmd)
 
@@ -53,9 +53,9 @@ Open [Safe Spot](http://127.0.0.1:8000).
 Demo staff accounts are saved in `.local/demo-accounts.txt`.
 
 Local deployments use SQLite and local image storage.
-Configure the model connection and SMTP through the environment variables in [.env.example](.env.example).
+Configure the model and email connections through the environment variables in [.env.example](.env.example).
 The server reads exported environment variables; it does not load `.env` automatically.
-Email remains in the application outbox until SMTP delivery is enabled.
+Email remains in the application outbox until Azure Email or SMTP delivery is enabled.
 
 ### Deploy to Azure
 

@@ -13,6 +13,9 @@
     },
     "enableAI": {
       "value": "${SAFE_SPOT_AI_ENABLED=false}"
+    },
+    "enableEmail": {
+      "value": "${SAFE_SPOT_EMAIL_ENABLED=false}"
     }
   }
 }

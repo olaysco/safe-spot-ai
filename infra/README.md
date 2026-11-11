@@ -105,6 +105,29 @@ Global Standard can process requests outside the resource region.
 The Azure subscription must have model quota in the selected region.
 Voice input continues to use browser speech recognition.
 
+## Enable email
+
+Set the manager address and enable Azure Email:
+
+```sh
+azd env set SAFE_SPOT_MANAGER_EMAIL manager@example.com
+azd env set SAFE_SPOT_EMAIL_ENABLED true
+azd provision --preview
+azd up
+```
+
+Replace `manager@example.com` with the address for manager alerts.
+Bicep creates an Azure-managed sender domain and grants the application identity access to send email.
+The worker sends report receipts, approved outcomes, and manager alerts.
+It checks the queue every five minutes.
+Existing captured messages remain in the demonstration outbox.
+
+Azure-managed domains permit [10 emails per hour](https://learn.microsoft.com/en-us/azure/communication-services/concepts/service-limits#rate-limits-for-email).
+Additional messages stay queued.
+The outbox records send status; it does not confirm inbox receipt.
+Azure charges for email use.
+Azure Email [retires on 30 September 2028](https://learn.microsoft.com/en-us/azure/communication-services/acs-retirement-and-breaking-changes-guide#acs-email).
+
 ## Resources and costs
 
 | Resource | Configuration |
@@ -116,8 +139,9 @@ Voice input continues to use browser speech recognition.
 | Image registry | Standard Container Registry; separate remote builds for web and worker |
 | Network and access | Separate subnets, private database DNS, and managed identity |
 | AI, when enabled | GPT-5-mini; Global Standard; capacity 10; managed identity access |
+| Email, when enabled | Azure Communication Services; managed sender domain; managed identity access |
 
-Email stays in capture mode until SMTP is configured.
+Email stays in capture mode until the email service and manager address are configured.
 AI stays disabled until `SAFE_SPOT_AI_ENABLED` is set to `true`.
 Free allowances depend on your subscription and usage.
 Image builds, networking, and other resources can incur charges.

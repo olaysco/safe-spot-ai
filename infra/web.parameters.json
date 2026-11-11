@@ -40,6 +40,15 @@
     },
     "aiTextDeployment": {
       "value": "${AZURE_AI_TEXT_DEPLOYMENT=}"
+    },
+    "emailEndpoint": {
+      "value": "${AZURE_EMAIL_ENDPOINT=}"
+    },
+    "emailSender": {
+      "value": "${AZURE_EMAIL_FROM=}"
+    },
+    "managerEmail": {
+      "value": "${SAFE_SPOT_MANAGER_EMAIL=}"
     }
   }
 }
