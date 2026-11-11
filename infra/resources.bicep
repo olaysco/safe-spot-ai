@@ -128,7 +128,8 @@ resource environment 'Microsoft.App/managedEnvironments@2025-01-01' = {
   name: '${name}-environment'
   location: location
   properties: {
-    appLogsConfiguration: { destination: 'none' }
+    // Use null to disable log export.
+    appLogsConfiguration: { destination: null }
     workloadProfiles: [{ name: 'Consumption', workloadProfileType: 'Consumption' }]
     vnetConfiguration: {
       infrastructureSubnetId: '${network.id}/subnets/apps'
