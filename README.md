@@ -49,7 +49,10 @@ The server checks staff roles and record versions.
 AI is optional.
 The manual route remains available when a provider fails or is not configured.
 The application does not simulate successful model responses.
-Speech input is not connected.
+The report description supports browser voice input when speech recognition is available.
+The browser can send audio to its speech service.
+Reporters must check the resulting text.
+The application does not use Phi for this voice input.
 
 Copy `.env.example` to `.env` for configuration reference.
 The local server reads process environment variables, not `.env` automatically.

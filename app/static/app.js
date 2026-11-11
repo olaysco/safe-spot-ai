@@ -31,7 +31,7 @@ function nav(){
   else links.push(['login','Staff sign-in']);
   $('#navigation').innerHTML=links.map(([v,l])=>`<button data-view="${v}" class="${view===v?'selected':''}">${l}</button>`).join('')+(user?`<span class="account">${esc(user.name)} · ${esc(user.role)}</span>${button('Sign out','logout','link')}`:'');
 }
-function render(html,focus=true){nav();$('#main').innerHTML=html;if(focus){$('#main').focus({preventScroll:true});window.scrollTo(0,0);}bind();}
+function render(html,focus=true){window.SafeSpotVoice.stop();nav();$('#main').innerHTML=html;if(focus){$('#main').focus({preventScroll:true});window.scrollTo(0,0);}bind();}
 async function open(next){view=next;message('');if(next==='report')render(reportView());else if(next==='tracking')render(trackingView());else if(next==='login')render(loginView());else if(next==='desk')await loadDesk();else if(next==='outbox')await loadOutbox();}
 function reportView(){
   if(receipt)return receiptView();
@@ -40,6 +40,7 @@ function reportView(){
   const hints={description:'Describe what you saw. You do not need a technical category.',location:'Use a building, entrance, room, or nearby sign. A map is not required.',time:'Give a date and time, or your best estimate. You can enter Not sure.',harm:'Describe any harm. You can enter Nobody was hurt or Not sure.',remains:'Tell us what remains. You can enter Not sure.'};
   let content='';
   if(hints[key])content=field(titles[key],key,draft[key],'textarea',hints[key]);
+  if(key==='description')content+=`<div class="voice-input">${button('Use voice input','voice','secondary','id="voice-button" aria-pressed="false" aria-describedby="voice-help voice-status"')}<p id="voice-help" class="hint">Your browser may send audio to its speech service. Check and edit the text before you continue.</p><p id="voice-status" role="status" aria-live="polite"></p></div>`;
   if(key==='consent')content=`<p>AI can help find missing details in your report. You will check every answer before you submit.</p><div class="inset">${config.ai?.text?'AI uses your description to suggest report details. Check each suggestion before submission.':'AI assistance is not connected yet. You can complete every reporting step yourself.'}</div><fieldset><legend class="sr-only">Choose whether to use AI assistance</legend>${[[true,'Yes, help me with my report','I will check the suggested details.'],[false,'No, I will complete it myself','The manual route includes every reporting step.']].map(([value,label,hint])=>`<label class="radio"><input type="radio" name="consent" value="${value}" ${draft.consent===value?'checked':''}><span>${label}<span class="hint">${hint}</span></span></label>`).join('')}</fieldset>`;
   if(key==='age_range')content=`<p>We do not need your exact age. Staff can see if you select Under 18.</p><fieldset><legend class="sr-only">Age group</legend>${['Under 18','18 and over','Prefer not to say'].map(x=>`<label class="radio"><input type="radio" name="age_range" value="${x}" ${draft.age_range===x?'checked':''}><span>${x}</span></label>`).join('')}</fieldset>`;
   if(key==='contact')content=field('Name (optional)','name',draft.name)+field('Email for updates (optional)','email',draft.email,'email')+`<p class="hint">${config.email_mode==='capture'?'Messages appear in the demonstration outbox. No email is delivered.':'The application sends updates through the configured email service.'}</p><label class="label" for="photos">Photos (optional)</label><input id="photos" type="file" accept="image/jpeg,image/png,image/webp" multiple><p class="hint">Up to three images, under 5 MB each. ${photos.length} selected.</p>`;
@@ -78,6 +79,8 @@ async function loadOutbox(){const notes=await api('/notifications');render(`<div
 function saveReport(form){for(const [key,value] of new FormData(form)){if(key in draft)draft[key]=key==='consent'?value==='true':value;}}
 async function changeCase(action,fields={}){selected=await api('/cases/'+selected.id+'/'+action,{method:'POST',body:{version:selected.version,...fields}});render(caseDetail());message('The record is saved.');}
 function bind(){
+  window.SafeSpotVoice.attach($('#description'),$('#voice-button'),$('#voice-status'),text=>{draft.description=text;});
+  $('#description')?.addEventListener('input',event=>{draft.description=event.target.value;});
   document.querySelectorAll('#main form').forEach(form=>form.addEventListener('submit',async event=>{
     event.preventDefault();if(form.dataset.busy)return;form.dataset.busy='1';const submitter=event.submitter;if(submitter)submitter.disabled=true;message('');
     try{
