@@ -1,0 +1,33 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/Azure/azure-dev/main/schemas/v1.0/azure.yaml.json
+name: safe-spot
+requiredVersions:
+  azd: '>=1.37.3'
+infra:
+  provider: bicep
+  path: infra
+  module: main
+services:
+  web:
+    project: .
+    language: docker
+    host: containerapp
+    module: web
+    apiVersion: '2025-01-01'
+    docker:
+      path: Dockerfile
+      context: .
+      platform: linux/amd64
+      remoteBuild: true
+  worker:
+    project: .
+    language: docker
+    host: containerapp
+    module: worker
+    apiVersion: '2025-01-01'
+    uses:
+      - web
+    docker:
+      path: Dockerfile
+      context: .
+      platform: linux/amd64
+      remoteBuild: true

@@ -1,3 +1,5 @@
+@allowed(['web', 'worker'])
+param serviceKind string
 param name string
 param location string
 param image string
@@ -24,9 +26,10 @@ var variables = [
   { name: 'AZURE_STORAGE_CONTAINER', value: 'evidence' }
   { name: 'AZURE_CLIENT_ID', value: identityClientId }
 ]
-resource app 'Microsoft.App/containerApps@2025-01-01' = {
+resource app 'Microsoft.App/containerApps@2025-01-01' = if (serviceKind == 'web') {
   name: '${name}-web'
   location: location
+  tags: { 'azd-env-name': name, 'azd-service-name': serviceKind }
   identity: identity
   properties: {
     environmentId: environmentId
@@ -59,9 +62,10 @@ resource app 'Microsoft.App/containerApps@2025-01-01' = {
     }
   }
 }
-resource worker 'Microsoft.App/jobs@2025-01-01' = {
+resource worker 'Microsoft.App/jobs@2025-01-01' = if (serviceKind == 'worker') {
   name: '${name}-worker'
   location: location
+  tags: { 'azd-env-name': name, 'azd-service-name': serviceKind }
   identity: identity
   properties: {
     environmentId: environmentId
@@ -86,5 +90,4 @@ resource worker 'Microsoft.App/jobs@2025-01-01' = {
       ]
     }
   }
-  dependsOn: [app]
 }

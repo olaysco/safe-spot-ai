@@ -2,7 +2,6 @@ param name string
 param location string
 @secure()
 param databasePassword string
-param image string
 
 var suffix = uniqueString(resourceGroup().id)
 var appName = '${name}-web'
@@ -138,23 +137,12 @@ resource environment 'Microsoft.App/managedEnvironments@2025-01-01' = {
   }
 }
 
-module runtime './runtime.bicep' = if (!empty(image)) {
-  name: '${name}-runtime'
-  params: {
-    name: name
-    location: location
-    image: image
-    environmentId: environment.id
-    appUrl: 'https://${appName}.${environment.properties.defaultDomain}'
-    identityId: identity.id
-    identityClientId: identity.properties.clientId
-    registryEndpoint: registry.properties.loginServer
-    storageUrl: storage.properties.primaryEndpoints.blob
-    databaseUrl: 'postgresql+psycopg://safespotadmin:${uriComponent(databasePassword)}@${database.properties.fullyQualifiedDomainName}:5432/safespot?sslmode=require'
-  }
-  dependsOn: [appDatabase, storageAccess, registryAccess]
-}
 output registryName string = registry.name
 output registryEndpoint string = registry.properties.loginServer
 output appName string = appName
 output appUrl string = 'https://${appName}.${environment.properties.defaultDomain}'
+output environmentId string = environment.id
+output identityId string = identity.id
+output identityClientId string = identity.properties.clientId
+output storageUrl string = storage.properties.primaryEndpoints.blob
+output databaseHost string = database.properties.fullyQualifiedDomainName
