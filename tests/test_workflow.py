@@ -1,4 +1,5 @@
 import copy
+import re
 import time
 import pytest
 from fastapi.testclient import TestClient
@@ -66,7 +67,7 @@ def test_full_lifecycle_and_approval_invalidation(system):
     case = mutate(client, case, 'send').json()
     case = mutate(client, case, 'close').json()
     assert case['status'] == 'Closed'
-    tracked = client.post('/api/tracking', json={'reference': receipt['reference'], 'token': receipt['tracking_token']}).json()
+    tracked = client.post('/api/tracking', json={'reference': receipt['reference']}).json()
     assert tracked['status'] == 'Closed'
     assert 'report' not in tracked and 'history' not in tracked
     stale = copy.deepcopy(case)
@@ -77,9 +78,22 @@ def test_full_lifecycle_and_approval_invalidation(system):
 
 
 def test_tracking_and_csrf(system):
-    _, client = system
+    app, client = system
     receipt = create(client)
-    assert client.post('/api/tracking', json={'reference': receipt['reference'], 'token': 'wrong'}).status_code == 404
+    assert 'tracking_token' not in receipt
+    assert re.fullmatch(r'SS-[23456789ABCDEFGHJKLMNPQRSTUVWXYZ]{5}-[23456789ABCDEFGHJKLMNPQRSTUVWXYZ]{5}', receipt['reference'])
+    for reference in (receipt['reference'], receipt['reference'].lower(), receipt['reference'].replace('-', ' '), receipt['reference'].replace('-', '')):
+        response = client.post('/api/tracking', json={'reference': reference})
+        assert response.status_code == 200
+        assert response.json()['reference'] == receipt['reference']
+        assert 'report' not in response.json() and 'id' not in response.json()
+    assert client.post('/api/tracking', json={'reference': 'SS-UNKNOWN'}).status_code == 404
+    with app.state.db() as db:
+        case = db.get(Case, receipt['id'])
+        case.reference = 'SS-AB12CD34'
+        case.tracking_hash = digest('former-private-tracking-code')
+        db.commit()
+    assert client.post('/api/tracking', json={'reference': 'ss-ab12cd34'}).status_code == 200
     assert client.post('/api/reports', json=REPORT, headers={'x-safe-spot': ''}).status_code == 403
     assert client.post('/api/reports', json=REPORT, headers={'origin': 'https://untrusted.test'}).status_code == 403
     assert client.post('/api/reports', json={**REPORT, 'confirmed': False}).status_code == 422
@@ -141,7 +155,9 @@ def test_reporter_image_upload_does_not_expose_case(system):
     receipt = create(client)
     buffer = io.BytesIO()
     Image.new('RGB', (10, 10), 'blue').save(buffer, format='PNG')
-    response = client.post('/api/cases/'+receipt['id']+'/attachments', headers={'x-tracking-token': receipt['tracking_token']}, files={'file': ('evidence.png', buffer.getvalue(), 'image/png')})
+    denied = client.post('/api/cases/'+receipt['id']+'/attachments', headers={'x-report-reference': 'SS-WRONG'}, files={'file': ('evidence.png', buffer.getvalue(), 'image/png')})
+    assert denied.status_code == 401
+    response = client.post('/api/cases/'+receipt['id']+'/attachments', headers={'x-report-reference': receipt['reference']}, files={'file': ('evidence.png', buffer.getvalue(), 'image/png')})
     assert response.status_code == 201, response.text
     assert set(response.json()) == {'id', 'name'}
     photo_id = response.json()['id']
@@ -150,7 +166,7 @@ def test_reporter_image_upload_does_not_expose_case(system):
     assert client.get('/api/attachments/'+photo_id).status_code == 200
     case = client.get('/api/cases/'+receipt['id']).json()
     assign(client, case)
-    assert client.post('/api/cases/'+receipt['id']+'/attachments', headers={'x-tracking-token': receipt['tracking_token']}, files={'file': ('evidence.png', buffer.getvalue(), 'image/png')}).status_code == 403
+    assert client.post('/api/cases/'+receipt['id']+'/attachments', headers={'x-report-reference': receipt['reference']}, files={'file': ('evidence.png', buffer.getvalue(), 'image/png')}).status_code == 403
 
 
 def test_report_assistance_needs_consent_and_keeps_human_review(system, monkeypatch):
@@ -193,7 +209,7 @@ def test_storage_failure_does_not_add_an_attachment(system, monkeypatch):
     def unavailable(*args):
         raise OSError('Storage offline')
     monkeypatch.setattr(app.state.storage, 'put', unavailable)
-    response = client.post('/api/cases/'+receipt['id']+'/attachments', headers={'x-tracking-token': receipt['tracking_token']}, files={'file': ('photo.png', content.getvalue(), 'image/png')})
+    response = client.post('/api/cases/'+receipt['id']+'/attachments', headers={'x-report-reference': receipt['reference']}, files={'file': ('photo.png', content.getvalue(), 'image/png')})
     assert response.status_code == 503
     with app.state.db() as db:
         assert list(db.scalars(select(Attachment))) == []

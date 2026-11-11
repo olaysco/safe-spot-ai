@@ -62,7 +62,6 @@ class Reopen(Revision):
 
 class Tracking(Strict):
     reference: str = Field(min_length=1, max_length=32)
-    token: str = Field(min_length=1, max_length=100)
 
 
 class GroupReview(Strict):

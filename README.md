@@ -12,7 +12,7 @@ People review the evidence and approve each critical decision.
 - **Voice input.** Reporters can speak their description in supported browsers, then check and edit the text.
 - **AI assistance.** GPT-5-mini on Azure extracts report details, suggests categories and priorities, and prepares outcome responses and manager summaries.
 - **Human approval.** Staff approve assignments, field findings, risk control, outcome responses, and closure. Changes cancel affected approvals.
-- **Report tracking.** A reference and private tracking code let reporters check progress without a staff account.
+- **Report tracking.** One short reference lets reporters check progress without a staff account.
 - **Case management.** Handlers can filter reports by status, priority, officer, location, deadline, and reporter age group.
 - **Field operations.** Assigned officers can record inspection findings, attach evidence, record required assistance, and confirm risk control.
 - **Manager dashboards.** Counts, progress charts, location groups, and risk control times help managers identify work that needs attention.

@@ -21,7 +21,7 @@ from app import ai, schemas
 from app.storage import create_storage
 from app.database import Attachment, Case, Group, Job, Limit, Notification, Session, User, connect, uid
 from app.domain import approval, audit, invalidate, new_case, require, riddor_details, serialize, status, targets
-from app.security import digest, hash_password, verify_password
+from app.security import digest, hash_password, normalize_reference, report_reference, verify_password
 from app.worker import add_notification, scan_alerts, tick
 
 log = logging.getLogger('safespot')
@@ -188,10 +188,9 @@ def create_app(database_url=None, worker=True):
     @app.post('/api/reports', status_code=201)
     def report(payload: schemas.Report, request: Request, db=Depends(db_session)):
         rate_limit(request, db, 'report', 30)
-        token = secrets.token_urlsafe(32)
         data = new_case(payload.model_dump(exclude={'confirmed'}))
-        reference = 'SS-' + secrets.token_hex(4).upper()
-        case = Case(reference=reference, tracking_hash=digest(token), data=data)
+        reference = report_reference()
+        case = Case(reference=reference, tracking_hash=digest(reference), data=data)
         db.add(case)
         db.flush()
         if payload.consent:
@@ -199,15 +198,16 @@ def create_app(database_url=None, worker=True):
         if any(term in (payload.description+' '+payload.remains).lower() for term in ('fire', 'electric shock', 'unconscious', 'gas leak')):
             add_notification(db, 'urgent:'+case.id, 'Urgent review requested', f'{reference} contains an urgent indicator. A person must assess it.', [case.id])
         if payload.email:
-            add_notification(db, 'receipt:'+case.id, f'Report received: {reference}', f'We received your report. Reference: {reference}. Keep your tracking code from the receipt screen.', [case.id], payload.email, 'receipt')
+            origin = os.getenv('PUBLIC_ORIGIN', 'http://127.0.0.1:8000').rstrip('/')
+            add_notification(db, 'receipt:'+case.id, f'Report received: {reference}', f'We received your report. Reference: {reference}. Use this reference to check progress at {origin}.', [case.id], payload.email, 'receipt')
         db.commit()
-        return {'reference': reference, 'tracking_token': token, 'id': case.id, 'status': 'Needs review'}
+        return {'reference': reference, 'id': case.id, 'status': 'Needs review'}
 
     @app.post('/api/tracking')
     def tracking(payload: schemas.Tracking, request: Request, db=Depends(db_session)):
         rate_limit(request, db, 'tracking', 60)
-        case = db.scalar(select(Case).where(Case.reference == payload.reference.upper()))
-        require(case and secrets.compare_digest(case.tracking_hash, digest(payload.token)), 'Report not found. Check the reference and tracking code.', 404)
+        case = db.scalar(select(Case).where(Case.reference == normalize_reference(payload.reference)))
+        require(case, 'Report not found. Check the reference.', 404)
         data = case.data
         return {'reference': case.reference, 'status': status(data), 'created': case.created,
                 'reviewed': data['approvals'].get('triage', {}).get('at'), 'controlled': data['approvals'].get('field', {}).get('at'),
@@ -426,8 +426,12 @@ def create_app(database_url=None, worker=True):
     async def upload(case_id: str, request: Request, file: UploadFile = File(...), db=Depends(db_session)):
         case = db.get(Case, case_id)
         require(case, 'Case not found.', 404)
+        reference = request.headers.get('x-report-reference', '')
         tracking = request.headers.get('x-tracking-token', '')
-        reporter = tracking and secrets.compare_digest(case.tracking_hash, digest(tracking))
+        if reference or tracking:
+            rate_limit(request, db, 'reporter_upload', 20)
+        reporter = (reference and secrets.compare_digest(digest(case.reference), digest(normalize_reference(reference)))) or (
+            tracking and secrets.compare_digest(case.tracking_hash, digest(tracking)))
         if reporter:
             require(not case.data['approvals'].get('triage') and time.time()-case.created < 3600, 'Staff have started review. Ask staff to add further evidence.', 403)
             actor = type('ReporterActor', (), {'id': 'reporter', 'name': 'Reporter'})()
