@@ -1,39 +1,32 @@
 import os
-import uuid
-from functools import lru_cache
+from urllib.parse import urlsplit
 
-from azure.communication.email import EmailClient
-from azure.core.exceptions import HttpResponseError
-from azure.core.rest import HttpRequest
-from azure.identity import DefaultAzureCredential
+import httpx
 
 
-@lru_cache(maxsize=1)
-def azure_client():
-    credential = DefaultAzureCredential(managed_identity_client_id=os.getenv('AZURE_CLIENT_ID'),
-                                        exclude_interactive_browser_credential=True)
-    return EmailClient(os.environ['AZURE_EMAIL_ENDPOINT'], credential,
-                       connection_timeout=10, read_timeout=20, retry_total=0)
-
-
-def operation_id(note):
-    return str(uuid.UUID(note.id))
-
-
-def send_azure(note):
+def send_zeptomail(note):
+    endpoint = os.getenv('ZEPTOMAIL_API_URL', '').strip()
+    token = os.getenv('ZEPTOMAIL_API_KEY', '').strip()
+    sender = os.getenv('ZEPTOMAIL_FROM', '').strip()
+    url = urlsplit(endpoint)
+    if (url.scheme != 'https' or not url.hostname or url.username or url.password
+            or url.query or url.fragment or url.path != '/v1.1/email' or not token or not sender):
+        raise ValueError('The ZeptoMail settings are incomplete or invalid.')
+    if not token.lower().startswith('zoho-enczapikey '):
+        token = 'Zoho-enczapikey ' + token
     message = {
-        'senderAddress': os.environ['AZURE_EMAIL_FROM'],
-        'recipients': {'to': [{'address': note.data['recipient']}]},
-        'content': {'subject': note.data['subject'], 'plainText': note.data['body']},
+        'from': {'address': sender, 'name': 'Safe Spot'},
+        'to': [{'email_address': {'address': note.data['recipient']}}],
+        'subject': note.data['subject'],
+        'textbody': note.data['body'],
+        'client_reference': note.id,
+        'track_opens': False,
+        'track_clicks': False,
     }
-    # The worker checks the result during a subsequent run.
-    azure_client().begin_send(message, operation_id=operation_id(note), polling=False).result()
-
-
-def azure_status(note):
-    endpoint = os.environ['AZURE_EMAIL_ENDPOINT'].rstrip('/')
-    response = azure_client().send_request(HttpRequest(
-        'GET', f'{endpoint}/emails/operations/{operation_id(note)}?api-version=2025-09-01'))
-    if response.status_code != 200:
-        raise HttpResponseError(response=response)
-    return response.json()['status']
+    with httpx.Client(timeout=httpx.Timeout(20, connect=10), follow_redirects=False) as client:
+        response = client.post(endpoint, headers={'Authorization': token}, json=message)
+        response.raise_for_status()
+        result = response.json()
+    if result.get('message') != 'OK' or not isinstance(result.get('request_id'), str) or not result['request_id']:
+        raise RuntimeError('ZeptoMail did not confirm acceptance of the email.')
+    return result['request_id']

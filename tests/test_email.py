@@ -1,9 +1,10 @@
+import json
 import time
 import uuid
 from types import SimpleNamespace
 
 import pytest
-from azure.core.exceptions import HttpResponseError
+import httpx
 
 from app import mail
 from app.database import Case, Limit, Notification, connect
@@ -13,10 +14,13 @@ from app.worker import deliver
 @pytest.fixture
 def email_system(tmp_path, monkeypatch):
     engine, factory = connect(f'sqlite:///{tmp_path}/email.db')
-    monkeypatch.setenv('EMAIL_MODE', 'azure')
+    monkeypatch.setenv('EMAIL_MODE', 'zeptomail')
     sent = []
-    monkeypatch.setattr(mail, 'send_azure', lambda note: sent.append(note.id))
-    monkeypatch.setattr(mail, 'azure_status', lambda note: 'Succeeded')
+    def send(note):
+        sent.append(note.id)
+        return 'provider-request-id'
+
+    monkeypatch.setattr(mail, 'send_zeptomail', send)
     yield factory, sent
     engine.dispose()
 
@@ -32,12 +36,13 @@ def add_message(factory, **values):
         return note.id
 
 
-def test_azure_delivery_checks_status_without_resending(email_system):
+def test_zeptomail_acceptance_does_not_repeat_delivery(email_system):
     factory, sent = email_system
     note_id = add_message(factory)
     deliver(factory)
     with factory() as db:
-        assert db.get(Notification, note_id).state == 'sending'
+        assert db.get(Notification, note_id).state == 'sent'
+        assert db.get(Notification, note_id).data['provider_request_id'] == 'provider-request-id'
     deliver(factory)
     deliver(factory)
     with factory() as db:
@@ -66,71 +71,85 @@ def test_delivery_keeps_captured_mail_and_cancels_unapproved_outcomes(email_syst
     assert sent == []
 
 
-def test_hourly_limit_and_provider_throttle_keep_mail_queued(email_system, monkeypatch):
+def test_provider_throttle_pauses_the_queue(email_system, monkeypatch):
     factory, sent = email_system
     note_id = add_message(factory)
-    with factory() as db:
-        db.add(Limit(key='email:azure:send', count=10, expires=time.time()+3600))
-        db.commit()
-    deliver(factory)
-    assert sent == []
-    with factory() as db:
-        assert db.get(Notification, note_id).state == 'recorded'
-        db.get(Limit, 'email:azure:send').count = 0
-        db.commit()
+    next_id = add_message(factory)
 
     def throttled(note):
         sent.append(note.id)
-        error = HttpResponseError('The email service is busy.')
-        error.status_code = 429
-        raise error
+        response = httpx.Response(429, headers={'Retry-After': '600'},
+                                  request=httpx.Request('POST', 'https://api.zeptomail.com/v1.1/email'))
+        response.raise_for_status()
 
-    monkeypatch.setattr(mail, 'send_azure', throttled)
+    monkeypatch.setattr(mail, 'send_zeptomail', throttled)
     deliver(factory)
     deliver(factory)
     with factory() as db:
         note = db.get(Notification, note_id)
         assert note.state == 'recorded'
-        assert note.data['next_attempt'] > time.time()
+        assert note.data['next_attempt'] > time.time() + 590
+        assert db.get(Notification, next_id).state == 'recorded'
+        db.get(Limit, 'email:zeptomail:retry').expires = 0
+        note.data = {**note.data, 'next_attempt': 0}
+        db.commit()
     assert sent == [note_id]
-
-
-def test_uncertain_send_uses_operation_status_before_another_send(email_system, monkeypatch):
-    factory, sent = email_system
-    note_id = add_message(factory)
-
-    def disconnected(note):
-        sent.append(note.id)
-        raise TimeoutError('The connection timed out.')
-
-    monkeypatch.setattr(mail, 'send_azure', disconnected)
-    deliver(factory)
+    monkeypatch.setattr(mail, 'send_zeptomail', lambda note: 'accepted')
     deliver(factory)
     with factory() as db:
         assert db.get(Notification, note_id).state == 'sent'
+        assert db.get(Notification, next_id).state == 'sent'
+
+
+@pytest.mark.parametrize('status,expected', [(None, 'delivery_unknown'), (401, 'failed'), (500, 'delivery_unknown')])
+def test_failed_or_uncertain_send_is_not_repeated(email_system, monkeypatch, status, expected):
+    factory, sent = email_system
+    note_id = add_message(factory)
+
+    def failed(note):
+        sent.append(note.id)
+        if status is None:
+            raise httpx.ReadTimeout('The connection timed out.')
+        httpx.Response(status, request=httpx.Request('POST', 'https://api.zeptomail.com/v1.1/email')).raise_for_status()
+
+    monkeypatch.setattr(mail, 'send_zeptomail', failed)
+    deliver(factory)
+    deliver(factory)
+    with factory() as db:
+        assert db.get(Notification, note_id).state == expected
     assert sent == [note_id]
 
 
-def test_azure_adapter_uses_one_operation_id_and_defers_status_checks(monkeypatch):
-    calls, requests = [], []
-    monkeypatch.setenv('AZURE_EMAIL_ENDPOINT', 'https://safespot.communication.azure.com')
-    monkeypatch.setenv('AZURE_EMAIL_FROM', 'DoNotReply@example.test')
+def test_zeptomail_request_uses_the_configured_sender_and_token(monkeypatch):
+    monkeypatch.setenv('ZEPTOMAIL_API_URL', 'https://api.zeptomail.eu/v1.1/email')
+    monkeypatch.setenv('ZEPTOMAIL_FROM', 'notifications@example.test')
+    monkeypatch.setenv('ZEPTOMAIL_API_KEY', 'test-token')
+    requests = []
 
-    def begin_send(message, **kwargs):
-        calls.append((message, kwargs))
-        return SimpleNamespace(result=lambda: {'status': 'Running'})
-
-    def send_request(request):
+    def respond(request):
         requests.append(request)
-        return SimpleNamespace(status_code=200, json=lambda: {'status': 'Succeeded'})
+        return httpx.Response(200, json={'message': 'OK', 'request_id': 'request-123'})
 
-    monkeypatch.setattr(mail, 'azure_client', lambda: SimpleNamespace(begin_send=begin_send, send_request=send_request))
+    client_class = httpx.Client
+    monkeypatch.setattr(mail.httpx, 'Client', lambda **kwargs: client_class(
+        transport=httpx.MockTransport(respond), **kwargs))
     note = SimpleNamespace(id=uuid.uuid4().hex, data={
         'recipient': 'recipient@example.test', 'subject': 'A test', 'body': 'A test message.',
     })
-    mail.send_azure(note)
-    assert calls[0][0]['senderAddress'] == 'DoNotReply@example.test'
-    assert calls[0][0]['recipients'] == {'to': [{'address': 'recipient@example.test'}]}
-    assert calls[0][1] == {'operation_id': str(uuid.UUID(note.id)), 'polling': False}
-    assert mail.azure_status(note) == 'Succeeded'
-    assert str(uuid.UUID(note.id)) in requests[0].url
+    assert mail.send_zeptomail(note) == 'request-123'
+    request = requests[0]
+    payload = json.loads(request.content)
+    assert str(request.url) == 'https://api.zeptomail.eu/v1.1/email'
+    assert request.headers['Authorization'] == 'Zoho-enczapikey test-token'
+    assert payload['from'] == {'address': 'notifications@example.test', 'name': 'Safe Spot'}
+    assert payload['to'] == [{'email_address': {'address': 'recipient@example.test'}}]
+    assert payload['textbody'] == 'A test message.'
+    assert payload['client_reference'] == note.id
+    assert payload['track_opens'] is False and payload['track_clicks'] is False
+    monkeypatch.setenv('ZEPTOMAIL_API_KEY', 'Zoho-enczapikey test-token')
+    mail.send_zeptomail(note)
+    assert requests[-1].headers['Authorization'] == 'Zoho-enczapikey test-token'
+    monkeypatch.setenv('ZEPTOMAIL_API_URL', 'http://api.zeptomail.eu/v1.1/email')
+    with pytest.raises(ValueError):
+        mail.send_zeptomail(note)
+    assert len(requests) == 2

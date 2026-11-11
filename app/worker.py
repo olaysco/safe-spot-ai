@@ -3,7 +3,9 @@ import os
 import smtplib
 import time
 from email.message import EmailMessage
-from azure.core.exceptions import HttpResponseError
+from email.utils import parsedate_to_datetime
+
+import httpx
 from sqlalchemy import or_, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm.exc import StaleDataError
@@ -82,49 +84,29 @@ def process_ai(factory):
         db.commit()
 
 
-def email_capacity(db, bucket, maximum):
-    now = time.time()
-    limit = db.get(Limit, bucket)
-    if not limit:
-        limit = Limit(key=bucket, count=0, expires=now + 3600)
-        db.add(limit)
-    elif limit.expires <= now:
-        limit.count, limit.expires = 0, now + 3600
-    if limit.count >= maximum:
-        return False
-    limit.count += 1
-    return True
-
-
-def check_azure_email(db):
-    notes = list(db.scalars(select(Notification).where(Notification.state == 'sending',
-                           Notification.data['provider'].as_string() == 'azure')
-                           .order_by(Notification.created).limit(2)))
-    for note in notes:
-        if not email_capacity(db, 'email:azure:status', 20):
-            break
-        db.commit()
+def retry_time(response):
+    value = response.headers.get('Retry-After', '')
+    try:
+        return time.time() + max(300, int(value))
+    except ValueError:
         try:
-            status = mail.azure_status(note)
-            if status == 'Succeeded':
-                note.state = 'sent'
-            elif status in ('Failed', 'Canceled'):
-                note.state = 'failed'
-        except HttpResponseError as exc:
-            if exc.status_code == 404:
-                note.state = 'delivery_unknown'
-        except Exception:
-            pass
-        if note.state == 'sending' and time.time() - note.data['submitted_at'] > 86400:
-            note.state = 'delivery_unknown'
-        db.commit()
+            return max(time.time() + 300, parsedate_to_datetime(value).timestamp())
+        except (TypeError, ValueError, OverflowError):
+            return time.time() + 300
 
 
 def deliver(factory):
     mode = os.getenv('EMAIL_MODE', 'capture')
     with factory() as db:
-        if mode == 'azure':
-            check_azure_email(db)
+        if mode == 'zeptomail':
+            for note in db.scalars(select(Notification).where(Notification.state == 'sending',
+                    Notification.data['provider'].as_string() == 'zeptomail')):
+                if note.data.get('submitted_at', note.created) < time.time() - 900:
+                    note.state = 'delivery_unknown'
+            db.commit()
+            pause = db.get(Limit, 'email:zeptomail:retry')
+            if pause and pause.expires > time.time():
+                return
         notes = list(db.scalars(select(Notification).where(Notification.state == 'recorded')
                                .order_by(Notification.created)))
         submitted = 0
@@ -146,24 +128,33 @@ def deliver(factory):
             if mode == 'capture':
                 note.state = 'captured'
                 continue
-            if mode == 'azure':
-                if submitted >= 2 or not email_capacity(db, 'email:azure:send', 10):
+            if mode == 'zeptomail':
+                if submitted >= 5:
                     break
                 note.state = 'sending'
-                note.data = {**note.data, 'provider': 'azure', 'submitted_at': time.time()}
+                note.data = {**note.data, 'provider': 'zeptomail', 'submitted_at': time.time()}
                 db.commit()
                 submitted += 1
                 try:
-                    mail.send_azure(note)
-                except HttpResponseError as exc:
-                    if exc.status_code == 429:
+                    request_id = mail.send_zeptomail(note)
+                    note.state = 'sent'
+                    note.data = {**note.data, 'provider_request_id': request_id}
+                except httpx.HTTPStatusError as exc:
+                    status = exc.response.status_code
+                    if status == 429:
                         note.state = 'recorded'
-                        note.data = {**note.data, 'next_attempt': time.time() + 3600}
-                    elif exc.status_code and 400 <= exc.status_code < 500 and exc.status_code not in (408, 409):
+                        next_attempt = retry_time(exc.response)
+                        note.data = {**note.data, 'next_attempt': next_attempt}
+                        db.merge(Limit(key='email:zeptomail:retry', count=1, expires=next_attempt))
+                        db.commit()
+                        break
+                    elif 400 <= status < 500 and status not in (408, 409):
                         note.state = 'failed'
-                    # Check uncertain requests by operation ID before another send.
+                    else:
+                        note.state = 'delivery_unknown'
                 except Exception:
-                    pass
+                    # Do not repeat a request when acceptance is unknown.
+                    note.state = 'delivery_unknown'
                 db.commit()
                 continue
             if mode != 'smtp':
