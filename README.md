@@ -49,7 +49,8 @@ python3.13 -m venv .venv
 .venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8000
 ```
 
-Open [Safe Spot](http://127.0.0.1:8000).
+Open [Safe Spot Locally](http://127.0.0.1:8000).
+Open [Safe Spot](https://stellar-custard-509dd4.netlify.app).
 Demo staff accounts are saved in `.local/demo-accounts.txt`.
 All three demo accounts use `password`.
 
