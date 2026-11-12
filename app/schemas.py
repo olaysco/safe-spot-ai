@@ -81,3 +81,23 @@ class Riddor(Revision):
 class ReportAssistance(Strict):
     description: str = Field(min_length=10, max_length=8000)
     consent: Literal[True]
+
+
+class AssistantDecision(Revision):
+    review_id: str
+    field: Literal['summary', 'category', 'priority']
+    action: Literal['accept', 'change', 'dismiss']
+    value: str = Field(default='', max_length=3000)
+
+
+class AssistantDraft(Revision):
+    text: str = Field(min_length=3, max_length=4000)
+    review_id: str = ''
+
+
+class AssistantRelationship(Revision):
+    review_id: str
+    reference: str
+    action: Literal['confirm', 'dismiss']
+    relationship: Literal['same_event', 'recurring']
+    reason: str = Field(min_length=3, max_length=2000)

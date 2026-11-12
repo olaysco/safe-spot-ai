@@ -17,7 +17,7 @@ from sqlalchemy import delete, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm.exc import StaleDataError
 
-from app import ai, schemas
+from app import ai, assistant, schemas
 from app.storage import create_storage
 from app.database import Attachment, Case, Group, Job, Limit, Notification, Session, User, connect, uid
 from app.domain import approval, audit, invalidate, new_case, require, riddor_details, serialize, status, targets
@@ -356,6 +356,119 @@ def create_app(database_url=None, worker=True):
     def groups(user=Depends(current_user), db=Depends(db_session)):
         role(user, 'handler', 'manager')
         return [{'id': g.id, 'version': g.version, **g.data} for g in db.scalars(select(Group))]
+
+    def assistant_review(case, review_id):
+        review = next((item for item in case.data.get('assistant', {}).get('reviews', [])
+                       if item['id'] == review_id), None)
+        require(review, 'Review not found.', 404)
+        require(review['fingerprint'] == assistant.fingerprint(assistant.evidence(case)),
+                'The case evidence changed. Prepare a new AI review.')
+        return review
+
+    def record_assistant(data, user, review_id, action, detail, **fields):
+        audit(data, user, action, detail)
+        data['history'][0]['assistant'] = {'review_id': review_id, **fields}
+
+    @app.post('/api/cases/{case_id}/assistant/review')
+    def prepare_assistant(case_id: str, payload: schemas.Revision, user=Depends(current_user), db=Depends(db_session)):
+        role(user, 'handler', 'manager')
+        case = fetch_case(db, case_id, user, payload.version)
+        require(case.data['report']['consent'], 'The reporter did not consent to AI assistance.', 403)
+        require(ai.capabilities()['text'], 'AI is not connected. You can write a draft manually.', 503)
+        source = assistant.evidence(case)
+        possible = assistant.candidates(case, db.scalars(select(Case).order_by(Case.created.desc()).limit(300)))
+        sources = [assistant.evidence(item) for item in possible]
+        try:
+            result = assistant.generate_review(source, sources)
+        except Exception:
+            raise HTTPException(503, 'AI could not prepare the review. Try again or continue manually.')
+        review = {
+            'id': uid(), 'at': time.time(), 'by': user.name, 'user_id': user.id,
+            'model': os.getenv('TEXT_AI_MODEL', ''), 'result': result, 'source': source,
+            'fingerprint': assistant.fingerprint(source),
+            'candidates': [{**item, 'case_id': record.id, 'fingerprint': assistant.fingerprint(item)}
+                           for item, record in zip(sources, possible)],
+            'decisions': {}, 'relationships': {},
+        }
+        data = copy.deepcopy(case.data)
+        data.setdefault('assistant', {}).setdefault('reviews', []).append(review)
+        record_assistant(data, user, review['id'], 'AI review prepared', 'Suggestions are ready for review.')
+        return persist(db, case, data)
+
+    @app.post('/api/cases/{case_id}/assistant/decision')
+    def assistant_decision(case_id: str, payload: schemas.AssistantDecision, user=Depends(current_user), db=Depends(db_session)):
+        role(user, 'handler', 'manager')
+        case = fetch_case(db, case_id, user, payload.version)
+        review = assistant_review(case, payload.review_id)
+        require(not review['decisions'].get(payload.field), 'This suggestion already has a recorded decision.')
+        original = review['result'][payload.field]['value']
+        value = payload.value if payload.action == 'change' else original
+        if payload.action != 'dismiss':
+            require(bool(value.strip()), 'Enter a value for the suggestion.', 422)
+            if payload.field in ai.TRIAGE_CHOICES:
+                require(value in ai.TRIAGE_CHOICES[payload.field] and value != 'Cannot determine',
+                        'Select a category or priority before accepting this suggestion.', 422)
+        data = copy.deepcopy(case.data)
+        saved = next(item for item in data['assistant']['reviews'] if item['id'] == payload.review_id)
+        decision = {'action': payload.action, 'value': value, 'original': original,
+                    'by': user.name, 'user_id': user.id, 'at': time.time()}
+        saved['decisions'][payload.field] = decision
+        if payload.field == 'summary' and payload.action != 'dismiss':
+            data['assistant'].setdefault('notes', []).append({**decision, 'review_id': review['id']})
+        record_assistant(data, user, review['id'], 'AI suggestion reviewed',
+                         f'{payload.field}: {payload.action}. {value}',
+                         field=payload.field, decision=decision)
+        return persist(db, case, data)
+
+    @app.post('/api/cases/{case_id}/assistant/draft')
+    def assistant_draft(case_id: str, payload: schemas.AssistantDraft, user=Depends(current_user), db=Depends(db_session)):
+        role(user, 'handler', 'manager')
+        case = fetch_case(db, case_id, user, payload.version)
+        if payload.review_id:
+            assistant_review(case, payload.review_id)
+        data = copy.deepcopy(case.data)
+        data.setdefault('assistant', {})['draft'] = {
+            'text': payload.text, 'review_id': payload.review_id,
+            'by': user.name, 'user_id': user.id, 'at': time.time(),
+        }
+        record_assistant(data, user, payload.review_id, 'Follow-up draft saved', payload.text)
+        return persist(db, case, data)
+
+    @app.post('/api/cases/{case_id}/assistant/relationship')
+    def assistant_relationship(case_id: str, payload: schemas.AssistantRelationship, user=Depends(current_user), db=Depends(db_session)):
+        role(user, 'handler', 'manager')
+        case = fetch_case(db, case_id, user, payload.version)
+        review = assistant_review(case, payload.review_id)
+        proposal = next((item for item in review['result']['related'] if item['reference'] == payload.reference), None)
+        require(proposal, 'Related report not found in this review.', 404)
+        require(not review['relationships'].get(payload.reference), 'This relationship already has a recorded decision.')
+        source = next(item for item in review['candidates'] if item['reference'] == payload.reference)
+        other = fetch_case(db, source['case_id'], user)
+        require(source['fingerprint'] == assistant.fingerprint(assistant.evidence(other)),
+                'The related case changed. Prepare a new AI review.')
+        data = copy.deepcopy(case.data)
+        saved = next(item for item in data['assistant']['reviews'] if item['id'] == payload.review_id)
+        decision = {'action': payload.action, 'relationship': payload.relationship, 'reason': payload.reason,
+                    'by': user.name, 'user_id': user.id, 'at': time.time()}
+        if payload.action == 'confirm':
+            ids = sorted([case.id, other.id])
+            duplicate = any(set(ids).issubset(g.data['case_ids']) and g.data['relationship'] == payload.relationship
+                            for g in db.scalars(select(Group)))
+            require(not duplicate, 'This relationship is already recorded.')
+            group = Group(id=uid(), data={
+                'case_ids': ids, 'relationship': payload.relationship, 'reason': payload.reason,
+                'by': user.name, 'user_id': user.id, 'at': decision['at'], 'review_id': review['id'],
+            })
+            db.add(group)
+            decision['group_id'] = group.id
+            other_data = copy.deepcopy(other.data)
+            record_assistant(other_data, user, review['id'], 'Incident relationship confirmed',
+                             f'{case.reference}: {payload.relationship}. {payload.reason}')
+            other.data, other.updated = other_data, time.time()
+        saved['relationships'][payload.reference] = decision
+        record_assistant(data, user, review['id'], 'AI relationship reviewed',
+                         f'{payload.reference}: {payload.action}. {payload.reason}', decision=decision)
+        return persist(db, case, data)
 
     @app.post('/api/groups', status_code=201)
     def group_review(payload: schemas.GroupReview, user=Depends(current_user), db=Depends(db_session)):
