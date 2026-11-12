@@ -9,23 +9,54 @@ from app.domain import approval, audit, new_case
 from app.security import digest, hash_password
 
 
+DEMO_ACCOUNTS = [
+    ('handler', 'Alex Morgan', 'functionzy+case@gmail.com'),
+    ('officer', 'Sam Taylor', 'functionzy+field@gmail.com'),
+    ('manager', 'Jo Patel', 'functionzy+manager@gmail.com'),
+]
+
+
+def configure_demo_accounts(db):
+    accounts = {}
+    for role, name, email in DEMO_ACCOUNTS:
+        account = db.scalar(select(User).where(User.email == email))
+        if not account:
+            account = db.scalar(select(User).where(User.email == role+'@safespot.test'))
+        if account and account.role != role:
+            raise SystemExit('A demo email belongs to another role. Check the account before continuing.')
+        if not account:
+            account = User(name=name, role=role, email=email, password='')
+            db.add(account)
+        account.email = email
+        account.password = hash_password('password')
+        accounts[role] = account
+    return accounts
+
+
+def save_demo_credentials():
+    path = Path('.local/demo-accounts.txt')
+    path.parent.mkdir(exist_ok=True)
+    path.touch(mode=0o600, exist_ok=True)
+    path.chmod(0o600)
+    path.write_text(''.join(f'{role}: {email}  password\n' for role, _, email in DEMO_ACCOUNTS))
+
+
+def demo_accounts():
+    engine, factory = connect()
+    with factory() as db:
+        configure_demo_accounts(db)
+        db.commit()
+    save_demo_credentials()
+    engine.dispose()
+    print('Demo accounts are ready. Account details: .local/demo-accounts.txt')
+
+
 def seed():
     engine, factory = connect()
-    path = Path('.local/demo-accounts.txt')
-    credentials = []
     with factory() as db:
-        for role, name in [('handler', 'Alex Morgan'), ('officer', 'Sam Taylor'), ('manager', 'Jo Patel')]:
-            email = role + '@safespot.test'
-            if not db.scalar(select(User).where(User.email == email)):
-                password = secrets.token_urlsafe(18)
-                db.add(User(name=name, email=email, role=role, password=hash_password(password)))
-                credentials.append(f'{role}: {email}  {password}')
+        configure_demo_accounts(db)
         db.commit()
-        if credentials:
-            path.parent.mkdir(exist_ok=True)
-            with path.open('a') as handle:
-                handle.write('\n'.join(credentials) + '\n')
-            path.chmod(0o600)
+        save_demo_credentials()
         if not db.scalar(select(Case)):
             handler = db.scalar(select(User).where(User.role == 'handler'))
             officer = db.scalar(select(User).where(User.role == 'officer'))
@@ -89,6 +120,6 @@ def create_user():
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Safe Spot account setup')
-    parser.add_argument('command', choices=['seed', 'user'])
+    parser.add_argument('command', choices=['seed', 'user', 'demo-accounts'])
     args = parser.parse_args()
-    seed() if args.command == 'seed' else create_user()
+    {'seed': seed, 'user': create_user, 'demo-accounts': demo_accounts}[args.command]()

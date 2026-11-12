@@ -51,6 +51,7 @@ python3.13 -m venv .venv
 
 Open [Safe Spot](http://127.0.0.1:8000).
 Demo staff accounts are saved in `.local/demo-accounts.txt`.
+All three demo accounts use `password`.
 
 Local deployments use SQLite and local image storage.
 Configure the model and email connections through the environment variables in [.env.example](.env.example).
