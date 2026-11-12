@@ -130,9 +130,12 @@ Git excludes `.local/`.
 Bicep stores the API key in a Container Apps secret for the worker.
 The web container does not receive the API key.
 
-The worker sends receipts, approved outcomes, and manager alerts every five minutes.
+The worker sends queued email every five minutes.
+Reporters receive receipts and approved outcomes.
+Case handlers receive new reports and approved risk control updates.
+Assigned field officers receive approved assignments.
 Manager alerts go to the email addresses of current manager accounts in Safe Spot.
-Alerts stay queued if no manager account exists.
+Staff alerts stay queued if the role has no account.
 Existing captured messages remain in the demonstration outbox.
 The outbox records provider acceptance; it does not confirm inbox receipt.
 The worker does not repeat requests with an unknown result.

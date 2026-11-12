@@ -64,7 +64,8 @@ def test_staff_review_saves_evidence_decisions_drafts_and_links(system, monkeypa
     with app.state.db() as db:
         group = db.scalar(select(Group))
         assert group.data['relationship'] == 'recurring' and group.data['review_id'] == review['id']
-        assert list(db.scalars(select(Notification))) == []
+        notes = list(db.scalars(select(Notification)))
+        assert len(notes) == 2 and all(note.key.startswith('new-report:') for note in notes)
     assert client.get('/api/cases/'+other['id']).json()['history'][0]['user_id'] == 'handler'
 
 

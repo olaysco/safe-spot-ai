@@ -14,17 +14,27 @@ from app.database import Case, Group, Job, Limit, Notification, User
 from app.domain import targets
 
 
-def manager_recipients(db):
-    return sorted({email.lower() for email in db.scalars(select(User.email).where(User.role == 'manager'))})
+def staff_recipients(db, role, user_id=None):
+    query = select(User.email).where(User.role == role)
+    if role == 'officer':
+        query = query.where(User.id == user_id)
+    return sorted({email.lower() for email in db.scalars(query)})
 
 
-def add_notification(db, key, subject, body, case_ids=None, recipient=None, kind='manager'):
+def recipient_label(recipients, kind):
+    role = {'manager': 'manager', 'handler': 'case handler', 'officer': 'field officer'}.get(kind, 'recipient')
+    return ', '.join(recipients) if recipients else f'No {role} account'
+
+
+def add_notification(db, key, subject, body, case_ids=None, recipient=None, kind='manager', *,
+                     staff_user_id=None, approval_stage=None, approval_at=None):
     if db.scalar(select(Notification).where(Notification.key == key)):
         return
-    recipients = manager_recipients(db) if kind == 'manager' else [recipient]
+    recipients = staff_recipients(db, kind, staff_user_id) if kind in ('manager', 'handler', 'officer') else [recipient]
     db.add(Notification(key=key, data={'subject': subject, 'body': body,
-        'recipient': ', '.join(recipients) if recipients else 'No manager account', 'recipients': recipients,
-        'case_ids': case_ids or [], 'kind': kind, 'acknowledged': None}))
+        'recipient': recipient_label(recipients, kind), 'recipients': recipients,
+        'case_ids': case_ids or [], 'kind': kind, 'acknowledged': None,
+        'staff_user_id': staff_user_id, 'approval_stage': approval_stage, 'approval_at': approval_at}))
 
 
 def scan_alerts(db):
@@ -130,10 +140,19 @@ def deliver(factory):
                 if not approved or note.key != f'outcome:{case.id}:{approved["at"]}':
                     note.state = 'cancelled'
                     continue
-            if note.data.get('kind') == 'manager':
-                recipients = manager_recipients(db)
+            if note.data.get('approval_stage') and ids:
+                case = db.get(Case, ids[0])
+                approved = case.data['approvals'].get(note.data['approval_stage']) if case else None
+                if not approved or approved['at'] != note.data['approval_at']:
+                    note.state = 'cancelled'
+                    continue
+                if note.data.get('kind') == 'officer' and case.data['officer_id'] != note.data['staff_user_id']:
+                    note.state = 'cancelled'
+                    continue
+            if note.data.get('kind') in ('manager', 'handler', 'officer'):
+                recipients = staff_recipients(db, note.data['kind'], note.data.get('staff_user_id'))
                 note.data = {**note.data, 'recipients': recipients,
-                             'recipient': ', '.join(recipients) if recipients else 'No manager account'}
+                             'recipient': recipient_label(recipients, note.data['kind'])}
                 if not recipients:
                     continue
             if mode == 'capture':

@@ -195,6 +195,8 @@ def create_app(database_url=None, worker=True):
         case = Case(reference=reference, tracking_hash=digest(reference), data=data)
         db.add(case)
         db.flush()
+        add_notification(db, 'new-report:'+case.id, f'New report: {reference}',
+                         f'Review report {reference} at {payload.location}.', [case.id], kind='handler')
         if payload.consent:
             db.add(Job(id='triage:'+case.id, case_id=case.id, kind='triage'))
         if any(term in (payload.description+' '+payload.remains).lower() for term in ('fire', 'electric shock', 'unconscious', 'gas leak')):
@@ -239,6 +241,11 @@ def create_app(database_url=None, worker=True):
             data[key] = getattr(payload, key)
         if payload.approve:
             data['approvals']['triage'] = approval(user, {k: data[k] for k in ('category', 'priority', 'officer_id')})
+            approved_at = data['approvals']['triage']['at']
+            add_notification(db, f'assignment:{case.id}:{approved_at}', f'Case assigned: {case.reference}',
+                             f'You have an approved assignment for {case.reference} at {data["report"]["location"]}. '
+                             'Open Safe Spot to review the case.', [case.id], kind='officer',
+                             staff_user_id=officer.id, approval_stage='triage', approval_at=approved_at)
         audit(data, user, 'Triage approved' if payload.approve else 'Triage draft saved', payload.reason)
         return persist(db, case, data)
 
@@ -252,6 +259,10 @@ def create_app(database_url=None, worker=True):
         data['findings'] = payload.model_dump(exclude={'version', 'approve'})
         if payload.approve:
             data['approvals']['field'] = approval(user, data['findings'])
+            approved_at = data['approvals']['field']['at']
+            add_notification(db, f'field-review:{case.id}:{approved_at}', f'Risk control ready for review: {case.reference}',
+                             f'The field officer approved risk control for {case.reference}. Review the outcome response.',
+                             [case.id], kind='handler', approval_stage='field', approval_at=approved_at)
         audit(data, user, 'Risk control approved' if payload.approve else 'Findings draft saved')
         return persist(db, case, data)
 

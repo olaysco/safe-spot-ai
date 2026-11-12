@@ -8,7 +8,7 @@ from app.database import Case, Group, Notification, User
 from app.domain import new_case, riddor_details
 from app.main import create_app
 from app.security import digest, hash_password
-from app.worker import scan_alerts, tick
+from app.worker import deliver, scan_alerts, tick
 
 HEADERS = {'x-safe-spot': '1'}
 REPORT = {'description': 'Water is on the floor beside the east entrance.', 'location': 'East entrance', 'time': 'Today at 09:15', 'harm': 'No injury', 'remains': 'Still wet', 'age_range': 'Under 18', 'consent': False, 'confirmed': True}
@@ -75,6 +75,40 @@ def test_full_lifecycle_and_approval_invalidation(system):
     assert case['status'] == 'Risk controlled' and case['sent'] is None
     assert mutate(client, case, 'send').status_code == 409
     assert mutate(client, stale, 'close').status_code == 409
+
+
+def test_staff_email_uses_current_accounts_and_keeps_reporter_recipients(system):
+    app, client = system
+    receipt = client.post('/api/reports', json={**REPORT, 'email': 'reporter@example.test'}).json()
+    login(client, 'handler')
+    case = assign(client, client.get('/api/cases/'+receipt['id']).json())
+    first_assignment = case['approvals']['triage']['at']
+    case = mutate(client, case, 'triage', category='Hazard', priority='Urgent', officer_id='other',
+                  reason='Another officer will inspect the entrance.', approve=True).json()
+    login(client, 'other')
+    case = mutate(client, case, 'findings', details='Inspected the floor', evidence='Inspection recorded',
+                  assistance='None', control='Floor cleaned and dry', approve=True).json()
+    login(client, 'handler')
+    case = mutate(client, case, 'response', text='The officer inspected and dried the floor.', approve=True).json()
+    assert mutate(client, case, 'send').status_code == 200
+    with app.state.db() as db:
+        for user_id, alias in [('handler', 'case'), ('other', 'field'), ('manager', 'manager')]:
+            db.get(User, user_id).email = f'functionzy+{alias}@gmail.com'
+        scan_alerts(db)
+        db.commit()
+    deliver(app.state.db)
+    with app.state.db() as db:
+        notes = list(db.scalars(select(Notification)))
+        for note in notes:
+            if note.key == f'assignment:{case["id"]}:{first_assignment}':
+                assert note.state == 'cancelled'
+                continue
+            assert note.state == 'captured'
+            expected = {'receipt': 'reporter@example.test', 'outcome': 'reporter@example.test',
+                        'handler': 'functionzy+case@gmail.com', 'officer': 'functionzy+field@gmail.com',
+                        'manager': 'functionzy+manager@gmail.com'}[note.data['kind']]
+            assert note.data['recipients'] == [expected]
+        assert {note.data['kind'] for note in notes} == {'receipt', 'outcome', 'handler', 'officer', 'manager'}
 
 
 def test_tracking_and_csrf(system):
