@@ -28,12 +28,19 @@ function select(label,name,options,value='',all=false){return `<div class="field
 function tag(status){return `<span class="tag ${status==='Closed'?'grey':status==='Risk controlled'?'green':''}">${esc(status)}</span>`;}
 function officer(id){return staff.find(s=>s.id===id)?.name||'Not assigned';}
 function nav(){
+  if(user&&['desk','outbox'].includes(view)){
+    const home=user.role==='manager'?'Dashboard':user.role==='officer'?'My work':'Cases';
+    const role={handler:'Case handler',officer:'Field officer',manager:'Manager'}[user.role];
+    const initials=user.name.trim().split(/\s+/).map(part=>part[0]).slice(0,2).join('').toUpperCase();
+    $('#navigation').innerHTML=`<div class="workspace-links"><button data-view="desk" class="${view==='desk'?'selected':''}" ${view==='desk'?'aria-current="page"':''}>${uiIcon('board',18)}${home}</button>${user.role!=='officer'?`<button data-view="outbox" class="${view==='outbox'?'selected':''}" ${view==='outbox'?'aria-current="page"':''}>Notifications</button>`:''}</div><details class="workspace-account"><summary aria-label="Account: ${esc(user.name)}"><span class="workspace-user">${esc(user.name)}<span>${role}</span></span><span class="staff-avatar" aria-hidden="true">${esc(initials)}</span></summary><div class="workspace-account-menu">${button('Make a report','account-report','link')}${button('Track a report','account-tracking','link')}${button('Sign out','logout','link')}</div></details>`;
+    return;
+  }
   const links=[['report','Make a report'],['tracking','Track a report']];
   if(user){links.push(['desk',user.role==='manager'?'Dashboard':user.role==='officer'?'My work':'Cases']);if(user.role!=='officer')links.push(['outbox','Notifications']);}
   else links.push(['login','Staff sign-in']);
   $('#navigation').innerHTML=links.map(([v,l])=>`<button data-view="${v}" class="${view===v?'selected':''}">${l}</button>`).join('')+(user?`<span class="account">${esc(user.name)} · ${esc(user.role)}</span>${button('Sign out','logout','link')}`:'');
 }
-function render(html,focus=true){window.SafeSpotVoice.stop();document.body.classList.toggle('staff-workspace',!!user&&['desk','outbox'].includes(view));document.body.classList.toggle('case-workspace-page',html.includes('class="case-workspace"'));nav();$('#main').innerHTML=html;if(focus){$('#main').focus({preventScroll:true});window.scrollTo(0,0);}bind();caseAssistant.resize();}
+function render(html,focus=true){window.SafeSpotVoice.stop();document.body.classList.toggle('staff-workspace',!!user&&['desk','outbox'].includes(view));document.body.classList.toggle('case-workspace-page',html.includes('class="case-workspace"'));nav();$('#main').innerHTML=html;if(focus){$('#main').scrollTop=0;$('#main').focus({preventScroll:true});window.scrollTo(0,0);}bind();caseAssistant.resize();}
 async function open(next){view=next;message('');if(next==='report')render(reportView());else if(next==='tracking')render(trackingView());else if(next==='login')render(loginView());else if(next==='desk')await loadDesk();else if(next==='outbox')await loadOutbox();}
 function reportView(){
   if(receipt)return receiptView();
@@ -150,7 +157,7 @@ function bind(){
         if(step<steps.length-1){if(key==='consent'&&draft.consent===null)throw Error('Choose whether to use AI assistance.');if(!['contact','consent'].includes(key)&&!String(draft[key]||'').trim())throw Error('Enter an answer before you continue.');if(key==='description'&&draft.description.trim().length<10)throw Error('Describe what happened with at least 10 characters.');if(key==='consent'&&draft.consent&&config.ai?.text){try{const result=await api('/report-assistance',{method:'POST',body:{description:draft.description,consent:true}});for(const [k,v] of Object.entries(result.details)){if(!draft[k])draft[k]=v;}message('AI suggested details. Check each answer before submission.');}catch{message('AI assistance is unavailable. Complete the report yourself.');}}step++;render(reportView());}
         else{receipt=await api('/reports',{method:'POST',body:{...draft,confirmed:true}});render(receiptView());let failed=0;for(const photo of photos){try{const body=new FormData();body.append('file',photo);await api('/cases/'+receipt.id+'/attachments',{method:'POST',headers:{'x-report-reference':receipt.reference},body});}catch{failed++;}}const label=$('#upload-status');if(label)label.textContent=failed?`${failed} images did not upload. Your report is saved. Contact the team with your reference.`:photos.length?'Your images are saved.':'';photos=[];}
       }else if(form.id==='tracking-form'){const result=await api('/tracking',{method:'POST',body:data});render(trackingView(result));$('#reference').value=result.reference;}
-      else if(form.id==='login-form'){user=await api('/auth/login',{method:'POST',body:data});await open('desk');}
+      else if(form.id==='login-form'){user=await api('/auth/login',{method:'POST',body:data});caseAssistant.reset();queueView='board';Object.keys(filters).forEach(key=>filters[key]='');await open('desk');}
       else if(form.id==='filter-form'){filterQueue(form);}
       else if(form.id==='period-form'){days=Number(data.days);locationFilter='';render(dashboard(),false);}
       else if(form.id==='group-form'){await api('/groups',{method:'POST',body:{...data,case_ids:new FormData(form).getAll('case_ids')}});await loadDesk();message('The relationship is recorded.');}
@@ -172,6 +179,8 @@ document.addEventListener('click',async event=>{
     if(b.dataset.removeGroup){await api('/groups/'+b.dataset.removeGroup,{method:'DELETE'});await loadDesk();return;}
     if(b.dataset.ack){await api('/notifications/'+b.dataset.ack+'/acknowledge',{method:'POST'});await loadOutbox();return;}
     const action=b.dataset.action;
+    if(action==='account-report')await open('report');
+    if(action==='account-tracking')await open('tracking');
     if(action==='report-back'){saveReport($('#report-form'));step--;render(reportView());}
     if(action==='track-receipt')await open('tracking');
     if(action==='new-report'){receipt=null;step=0;photos=[];draft={description:'',location:'',time:'',harm:'',remains:'',age_range:'',consent:null,name:'',email:''};await open('report');}
@@ -190,4 +199,12 @@ document.addEventListener('click',async event=>{
     if(action==='summary'){b.disabled=true;try{const result=await api('/manager/summary',{method:'POST'});$('#summary-result').textContent=result.label+': '+result.text;}finally{b.disabled=false;}}
   }catch(error){message(error.message,true);}
 });
-(async()=>{try{config=await api('/config');try{user=await api('/auth/me');}catch{}await open('report');}catch(error){message(error.message,true);}})();
+document.addEventListener('click',event=>{
+  const account=$('.workspace-account[open]');
+  if(account&&!account.contains(event.target))account.open=false;
+});
+document.addEventListener('keydown',event=>{
+  const account=$('.workspace-account[open]');
+  if(event.key==='Escape'&&account){event.preventDefault();event.stopImmediatePropagation();account.open=false;account.querySelector('summary').focus();}
+},true);
+(async()=>{try{config=await api('/config');try{user=await api('/auth/me');}catch{}await open(user?'desk':'report');}catch(error){message(error.message,true);}})();

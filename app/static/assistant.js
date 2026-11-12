@@ -109,7 +109,9 @@ const caseAssistant=(()=>{
 
   function redraw(focus=''){
     if(!$('.case-assistant-layout'))return;
+    const scroll=$('.case-board-area')?.scrollTop||0;
     render(caseQueue(),false);
+    $('.case-board-area').scrollTop=scroll;
     if(focus)document.getElementById(focus)?.focus({preventScroll:true});
   }
 
@@ -220,7 +222,7 @@ const caseAssistant=(()=>{
   function reset(){state.open=false;state.id=null;requestNumber++;drafts.clear();edits.clear();}
   function resize(){
     const host=$('#assistant-host');
-    if(host&&state.open)host.style.setProperty('--assistant-height',Math.max(260,innerHeight-Math.max(16,host.getBoundingClientRect().top)-16)+'px');
+    if(host&&state.open)host.style.setProperty('--assistant-height',host.clientHeight+'px');
   }
   window.addEventListener('resize',resize,{passive:true});
   window.addEventListener('scroll',resize,{passive:true});

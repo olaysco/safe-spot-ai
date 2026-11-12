@@ -1,0 +1,44 @@
+body.staff-workspace{display:grid;grid-template-areas:"brand" "navigation" "notice" "main";grid-template-rows:auto auto auto minmax(0,1fr);height:100dvh;min-height:0;overflow:hidden;background:#f3f5f6}
+.staff-workspace>.brand{grid-area:brand;border-bottom-width:4px}
+.staff-workspace .brand>.container{padding-block:14px;min-height:68px}
+.staff-workspace .wordmark{line-height:1.25}
+.staff-workspace .service{font-size:16px}
+.staff-workspace>.navigation-shell{grid-area:navigation;background:white;border-bottom:1px solid #d6dde2;position:relative;z-index:3}
+.staff-workspace .staff-nav{display:flex;align-items:center;justify-content:space-between;gap:16px;min-height:64px;padding:0;margin:0;border:0;flex-wrap:nowrap}
+.workspace-links{display:flex;align-items:center;gap:24px;min-width:0}
+.workspace-links>button{display:flex;align-items:center;gap:8px;min-height:64px;padding:12px 0;font-size:16px;border-bottom:3px solid transparent;color:#52616b}
+.workspace-links>button.selected{border-bottom-color:var(--green);color:var(--ink)}
+.workspace-account{position:relative;flex:none;margin-left:auto}
+.workspace-account>summary{display:flex;align-items:center;gap:12px;min-height:44px;cursor:pointer;list-style:none;border-radius:6px}
+.workspace-account>summary::-webkit-details-marker{display:none}
+.workspace-account>summary:focus-visible{outline:3px solid var(--yellow);outline-offset:3px}
+.workspace-user{display:flex;gap:10px;align-items:center;font-size:14px}
+.workspace-user>span{color:var(--muted)}
+.workspace-account-menu{position:absolute;right:0;top:calc(100% + 8px);display:grid;min-width:190px;padding:8px;background:white;border:1px solid #d6dde2;border-radius:8px;box-shadow:0 6px 20px #17212618}
+.workspace-account-menu>button{padding:10px 12px;text-align:left;min-height:44px;border-radius:4px;font-size:15px;white-space:nowrap}
+.workspace-account-menu>button:hover{background:#e5f2ed}
+.staff-workspace>#message{grid-area:notice;font-size:14px}
+.staff-workspace>#message:empty{display:none}
+.staff-workspace>#message:not(:empty){margin:0;padding-block:10px}
+.staff-workspace>#main{grid-area:main;min-width:0;min-height:0;overflow-y:auto;overscroll-behavior:contain;padding-block:24px}
+.staff-workspace>footer{display:none}
+.case-workspace-page>#main{padding:0;overflow:hidden}
+.case-workspace-page .case-assistant-layout{height:100%;min-height:0;gap:0;align-items:stretch}
+.case-workspace-page .case-board-area{height:100%;min-height:0;overflow-y:auto;overscroll-behavior:contain;padding:24px clamp(20px,2vw,40px) 32px}
+.case-workspace-page .case-workspace{min-width:0}
+.case-workspace-page .queue-title{margin:0 0 24px;gap:16px}
+.case-workspace-page .queue-title h1{font-size:32px;margin-bottom:8px}
+.case-workspace-page .queue-subtitle{font-size:16px}
+.case-workspace-page .queue-filters{padding-bottom:24px}
+.case-workspace-page .queue-viewbar{margin:20px 0 24px}
+.case-workspace-page #assistant-host{position:static;height:100%;min-height:0}
+.case-workspace-page #assistant-host:empty{display:none}
+.case-workspace-page .case-assistant{height:100%;min-height:0;max-height:none;border:0;border-left:1px solid #d6dde2;border-radius:0}
+.case-workspace-page .assistant-content{flex:1;overflow-y:auto;min-height:0}
+.case-workspace-page .assistant-footer{position:static}
+.case-workspace-page .assistant-header{padding-top:20px}
+.case-workspace-page #main>.case-workspace{height:100%;overflow-y:auto;padding:24px clamp(20px,2vw,40px) 32px}
+@media(min-width:1440px){.case-workspace-page .assistant-open .case-board{grid-template-columns:repeat(4,minmax(0,1fr))}}
+@media(max-width:999px){.case-workspace-page .case-assistant{border-left:0}.case-workspace-page .assistant-open #assistant-host{width:100%}.workspace-user>span{display:none}}
+@media(max-width:767px){.staff-workspace .brand>.container{min-height:60px;padding-block:10px}.staff-workspace .wordmark{font-size:26px}.workspace-links{gap:20px}.workspace-links>button{font-size:15px;min-height:56px}.staff-workspace .staff-nav{min-height:56px}.workspace-user{display:none}.case-workspace-page .case-board-area,.case-workspace-page #main>.case-workspace{padding:20px 16px 28px}.case-workspace-page .assistant-header{padding-top:16px}.case-workspace-page .queue-title h1{font-size:30px}}
+@media(max-height:600px){body.staff-workspace{display:flex;height:auto;min-height:100dvh;overflow:auto}.staff-workspace>#main{overflow:visible}.case-workspace-page .case-assistant-layout,.case-workspace-page .case-board-area,.case-workspace-page #assistant-host,.case-workspace-page .case-assistant,.case-workspace-page #main>.case-workspace{height:auto;overflow:visible}.case-workspace-page .assistant-content{overflow:visible}}
