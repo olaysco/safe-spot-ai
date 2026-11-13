@@ -13,6 +13,7 @@ param aiEndpoint string = ''
 param aiTextDeployment string = ''
 param emailEndpoint string = ''
 param emailSender string = ''
+param demoEmailTo string = ''
 @secure()
 param emailApiKey string = ''
 @secure()
@@ -37,6 +38,7 @@ var variables = concat([
   { name: 'COOKIE_SECURE', value: 'true' }
   { name: 'WORKER_ENABLED', value: 'false' }
   { name: 'EMAIL_MODE', value: emailEnabled ? 'zeptomail' : 'capture' }
+  { name: 'DEMO_EMAIL_TO', value: demoEmailTo }
   { name: 'ZEPTOMAIL_API_URL', value: emailEndpoint }
   { name: 'ZEPTOMAIL_FROM', value: emailSender }
   { name: 'STORAGE_BACKEND', value: 'azure' }

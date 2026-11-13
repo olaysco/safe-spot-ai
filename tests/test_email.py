@@ -176,6 +176,8 @@ def test_zeptomail_request_uses_the_configured_sender_and_token(monkeypatch):
     assert payload['from'] == {'address': 'notifications@example.test', 'name': 'Safe Spot'}
     assert payload['to'] == [{'email_address': {'address': 'recipient@example.test'}}]
     assert payload['textbody'] == 'A test message.'
+    assert 'A test message.' in payload['htmlbody']
+    assert '<html lang="en">' in payload['htmlbody']
     assert payload['client_reference'] == note.id
     assert payload['track_opens'] is False and payload['track_clicks'] is False
     monkeypatch.setenv('ZEPTOMAIL_API_KEY', 'Zoho-enczapikey test-token')
@@ -190,3 +192,49 @@ def test_zeptomail_request_uses_the_configured_sender_and_token(monkeypatch):
     with pytest.raises(ValueError):
         mail.send_zeptomail(note)
     assert len(requests) == 2
+
+
+@pytest.mark.parametrize('kind,role', [('receipt', 'Reporter'), ('outcome', 'Reporter'),
+    ('handler', 'Case handler'), ('officer', 'Field officer'), ('manager', 'Manager')])
+def test_demo_email_routes_to_one_inbox_and_identifies_role(monkeypatch, kind, role):
+    monkeypatch.setenv('DEMO_EMAIL_TO', 'functionzy@gmail.com')
+    monkeypatch.setenv('PUBLIC_ORIGIN', 'https://safespot.example.test')
+    note = SimpleNamespace(data={'kind': kind, 'subject': 'Report received: SS-DEMO0009',
+        'body': 'Water remains near the entrance. <script>alert(1)</script>',
+        'recipient': 'original@example.test', 'recipients': ['original@example.test']})
+    message = mail.prepare_message(note)
+    assert message['recipients'] == ['functionzy@gmail.com']
+    assert message['subject'] == f'[Safe Spot demo | {role}] Report received: SS-DEMO0009'
+    assert note.data['delivery_recipients'] == ['functionzy@gmail.com']
+    assert note.data['recipients'] == ['original@example.test']
+    assert 'original@example.test' in message['text']
+    assert '<script>' not in message['html']
+    assert '&lt;script&gt;' in message['html']
+    assert 'href="https://safespot.example.test"' in message['html']
+    assert mail.prepare_message(note) == message
+    monkeypatch.delenv('DEMO_EMAIL_TO')
+    assert mail.prepare_message(note)['recipients'] == ['original@example.test']
+
+
+def test_demo_email_provider_payload_has_only_the_demo_recipient(monkeypatch):
+    monkeypatch.setenv('DEMO_EMAIL_TO', 'functionzy@gmail.com')
+    monkeypatch.setenv('ZEPTOMAIL_API_URL', 'https://api.zeptomail.eu/v1.1/email')
+    monkeypatch.setenv('ZEPTOMAIL_FROM', 'notifications@example.test')
+    monkeypatch.setenv('ZEPTOMAIL_API_KEY', 'test-token')
+    requests = []
+    def respond(request):
+        requests.append(json.loads(request.content))
+        return httpx.Response(200, json={'message': 'OK', 'request_id': 'demo-accepted'})
+    client_class = httpx.Client
+    monkeypatch.setattr(mail.httpx, 'Client', lambda **kwargs: client_class(
+        transport=httpx.MockTransport(respond), **kwargs))
+    note = SimpleNamespace(id='demo-note', data={'kind': 'manager', 'subject': 'Daily summary',
+        'body': 'Two cases remain open.', 'recipients': ['one@example.test', 'two@example.test']})
+    assert mail.send_zeptomail(note) == 'demo-accepted'
+    assert requests[0]['to'] == [{'email_address': {'address': 'functionzy@gmail.com'}}]
+    assert requests[0]['subject'] == '[Safe Spot demo | Manager] Daily summary'
+    assert 'Two cases remain open.' in requests[0]['htmlbody']
+    monkeypatch.setenv('DEMO_EMAIL_TO', 'invalid\naddress')
+    with pytest.raises(ValueError):
+        mail.send_zeptomail(note)
+    assert len(requests) == 1

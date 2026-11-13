@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>$subject</title>
+  <style>
+    @media (max-width: 480px) {
+      .email-wrap { padding: 16px 8px !important; }
+      .email-content { padding: 28px 20px !important; }
+      .email-title { font-size: 26px !important; }
+    }
+  </style>
+</head>
+<body style="margin:0;padding:0;background:#f3f5f6;font-family:Arial,Helvetica,sans-serif;color:#172126;">
+  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#f3f5f6;">
+    <tr><td class="email-wrap" align="center" style="padding:40px 16px;">
+      <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:600px;border:1px solid #d5dce0;border-radius:12px;background:#ffffff;overflow:hidden;">
+        <tr><td style="padding:28px 32px;background:#090d0b;border-bottom:4px solid #007744;border-radius:11px 11px 0 0;">
+          <div style="font-size:30px;line-height:1.2;font-weight:700;letter-spacing:-1px;color:#ffffff;">Safe Spot</div>
+          <div style="margin-top:8px;font-size:14px;line-height:1.5;color:#d4e6de;">Report a concern. Make a place safer.</div>
+        </td></tr>
+        <tr><td class="email-content" style="padding:32px;">
+          <div style="margin-bottom:20px;">
+            <span style="display:inline-block;padding:6px 10px;border-radius:4px;background:#e5f2ed;color:#285e53;font-size:13px;font-weight:700;">$role</span>
+            <span style="display:inline-block;margin-left:8px;font-size:11px;font-weight:700;letter-spacing:1px;color:#4b5963;">$mode</span>
+          </div>
+          <h1 class="email-title" style="margin:0 0 24px;font-size:30px;line-height:1.25;letter-spacing:-0.5px;color:#172126;">$title</h1>
+          $reference
+          <div style="font-size:16px;color:#35434a;">$body</div>
+          <div style="margin-top:28px;">$action</div>
+        </td></tr>
+        <tr><td style="padding:20px 32px;border-top:1px solid #e7ebee;background:#fafbfb;color:#4b5963;border-radius:0 0 11px 11px;">
+          <p style="margin:0;font-size:13px;font-weight:700;">Safe Spot · Health, safety and environment</p>
+          $demo_details
+        </td></tr>
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>

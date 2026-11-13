@@ -12,6 +12,7 @@ param aiEndpoint string = ''
 param aiTextDeployment string = ''
 param emailEndpoint string = ''
 param emailSender string = ''
+param demoEmailTo string = ''
 @secure()
 param emailApiKey string = ''
 @secure()
@@ -35,6 +36,7 @@ module runtime './runtime.bicep' = {
     aiTextDeployment: aiTextDeployment
     emailEndpoint: emailEndpoint
     emailSender: emailSender
+    demoEmailTo: demoEmailTo
     emailApiKey: emailApiKey
     databaseUrl: 'postgresql+psycopg://safespotadmin:${uriComponent(databasePassword)}@${databaseHost}:5432/safespot?sslmode=require'
   }

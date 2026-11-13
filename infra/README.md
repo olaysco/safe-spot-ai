@@ -140,6 +140,18 @@ Existing captured messages remain in the demonstration outbox.
 The outbox records provider acceptance; it does not confirm inbox receipt.
 The worker does not repeat requests with an unknown result.
 
+For the demonstration, route all email to one inbox:
+
+```sh
+azd env set DEMO_EMAIL_TO functionzy@gmail.com
+azd deploy --all
+```
+
+This includes reporter receipts, approved outcomes, and staff alerts.
+Each subject identifies the role and message purpose.
+The email includes an HTML template and a plain text version.
+Set `DEMO_EMAIL_TO` to an empty value to restore normal recipients.
+
 ## Resources and costs
 
 | Resource | Configuration |

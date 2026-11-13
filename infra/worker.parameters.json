@@ -47,6 +47,9 @@
     "emailSender": {
       "value": "${ZEPTOMAIL_FROM=}"
     },
+    "demoEmailTo": {
+      "value": "${DEMO_EMAIL_TO=}"
+    },
     "emailApiKey": {
       "value": "${ZEPTOMAIL_API_KEY=}"
     }

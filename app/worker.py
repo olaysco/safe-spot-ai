@@ -156,6 +156,7 @@ def deliver(factory):
                 if not recipients:
                     continue
             if mode == 'capture':
+                mail.prepare_message(note)
                 note.state = 'captured'
                 continue
             if mode == 'zeptomail':
@@ -189,14 +190,16 @@ def deliver(factory):
                 continue
             if mode != 'smtp':
                 raise ValueError('The email mode is not supported.')
+            content = mail.prepare_message(note)
             note.state = 'sending'
             db.commit()
             msg = EmailMessage()
             msg['From'] = os.getenv('SMTP_FROM', 'safespot@example.test')
-            msg['To'] = note.data['recipient']
-            msg['Subject'] = note.data['subject']
+            msg['To'] = ', '.join(content['recipients'])
+            msg['Subject'] = content['subject']
             msg['Message-ID'] = f'<{note.id}@safespot.local>'
-            msg.set_content(note.data['body'])
+            msg.set_content(content['text'])
+            msg.add_alternative(content['html'], subtype='html')
             try:
                 with smtplib.SMTP(os.getenv('SMTP_HOST', '127.0.0.1'), int(os.getenv('SMTP_PORT', '1025')), timeout=15) as smtp:
                     if os.getenv('SMTP_TLS') == 'true':
