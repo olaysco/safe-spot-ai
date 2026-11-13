@@ -2,6 +2,13 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
+DEMO_LOGIN_EMAILS = {
+    'field@gmail.com': 'functionzy+field@gmail.com',
+    'case@gmail.com': 'functionzy+case@gmail.com',
+    'manager@gmail.com': 'functionzy+manager@gmail.com',
+}
+
+
 class Strict(BaseModel):
     model_config = ConfigDict(extra='forbid', str_strip_whitespace=True)
 
@@ -29,6 +36,12 @@ class Report(Strict):
 class Login(Strict):
     email: str = Field(max_length=255)
     password: str = Field(min_length=1, max_length=200)
+
+    @field_validator('email')
+    @classmethod
+    def login_email(cls, value):
+        email = value.lower()
+        return DEMO_LOGIN_EMAILS.get(email, email)
 
 
 class Revision(Strict):

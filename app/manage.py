@@ -7,6 +7,7 @@ from sqlalchemy import select
 from app.database import Case, Group, User, connect
 from app.domain import approval, audit, new_case
 from app.security import digest, hash_password
+from app.schemas import DEMO_LOGIN_EMAILS
 
 
 DEMO_ACCOUNTS = [
@@ -38,7 +39,8 @@ def save_demo_credentials():
     path.parent.mkdir(exist_ok=True)
     path.touch(mode=0o600, exist_ok=True)
     path.chmod(0o600)
-    path.write_text(''.join(f'{role}: {email}  password\n' for role, _, email in DEMO_ACCOUNTS))
+    logins = {email: login for login, email in DEMO_LOGIN_EMAILS.items()}
+    path.write_text(''.join(f'{role}: {logins[email]}  password\n' for role, _, email in DEMO_ACCOUNTS))
 
 
 def demo_accounts():

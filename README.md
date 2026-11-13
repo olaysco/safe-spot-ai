@@ -53,6 +53,8 @@ Open [Safe Spot Locally](http://127.0.0.1:8000).
 Open [Safe Spot](https://stellar-custard-509dd4.netlify.app).
 Demo staff accounts are saved in `.local/demo-accounts.txt`.
 All three demo accounts use `password`.
+Use `field@gmail.com`, `case@gmail.com`, or `manager@gmail.com` to sign in.
+Staff notifications use the corresponding `functionzy+field`, `functionzy+case`, and `functionzy+manager` Gmail addresses.
 
 Local deployments use SQLite and local image storage.
 Configure the model and email connections through the environment variables in [.env.example](.env.example).
