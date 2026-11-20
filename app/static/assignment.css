@@ -1,0 +1,12 @@
+.assignment-panel{margin:1.5rem 0;padding:1.25rem;border:1px solid #cbd5e1;border-radius:12px;background:#f8fafc}
+.assignment-panel h3{margin-top:0}
+.assignment-panel #assignment-result{margin-top:1rem}
+.assignment-choice{padding:1rem;margin:1rem 0;background:#eaf4ee;border-left:4px solid #236340}
+.assignment-source{font-size:.9rem;font-weight:600;color:#334155}
+.assignment-panel details{margin:1rem 0}
+.assignment-panel summary{cursor:pointer;font-weight:600}
+.assignment-panel table{min-width:480px}
+.assignment-panel .table-wrap{overflow-x:auto;max-width:100%}
+.capacity-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,280px),1fr));gap:1rem}
+.capacity-grid .assignment-panel{margin:1rem 0}
+.capacity-grid select{max-width:100%;margin-bottom:1rem}

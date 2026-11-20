@@ -3,7 +3,7 @@ import time
 import uuid
 from pathlib import Path
 
-from sqlalchemy import JSON, Float, Integer, String, create_engine, event
+from sqlalchemy import JSON, Boolean, Float, Integer, String, create_engine, event
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, sessionmaker
 
 
@@ -29,6 +29,26 @@ class Session(Base):
     token: Mapped[str] = mapped_column(String(64), primary_key=True)
     user_id: Mapped[str] = mapped_column(String(32), index=True)
     expires: Mapped[float] = mapped_column(Float)
+
+
+class OfficerProfile(Base):
+    __tablename__ = 'officer_profiles'
+    user_id: Mapped[str] = mapped_column(String(32), primary_key=True)
+    department: Mapped[str] = mapped_column(String(80))
+    available: Mapped[bool] = mapped_column(Boolean, default=True)
+    capacity: Mapped[int] = mapped_column(Integer, default=5)
+    demo: Mapped[bool] = mapped_column(Boolean, default=False)
+    version: Mapped[int] = mapped_column(Integer, default=1)
+    __mapper_args__ = {'version_id_col': version}
+
+
+class CapacityChange(Base):
+    __tablename__ = 'capacity_changes'
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=uid)
+    officer_id: Mapped[str] = mapped_column(String(32), index=True)
+    modified_by: Mapped[str] = mapped_column(String(32))
+    modified_at: Mapped[float] = mapped_column(Float, default=time.time)
+    data: Mapped[dict] = mapped_column(JSON)
 
 
 class Case(Base):

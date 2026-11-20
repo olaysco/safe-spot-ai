@@ -1,8 +1,12 @@
 import json
+import logging
 import os
+import time
 from functools import lru_cache
 
 import httpx
+
+log = logging.getLogger('uvicorn.error')
 
 
 class AIUnavailable(Exception):
@@ -70,9 +74,14 @@ def generate(task, evidence, *, schema=None):
         body['response_format'] = {'type': 'json_schema', 'json_schema': {
             'name': 'safe_spot_result', 'strict': True, 'schema': schema,
         }}
+    started = time.perf_counter()
+    headers = auth_headers()
+    authenticated = time.perf_counter()
     with httpx.Client(timeout=60) as client:
         response = client.post(os.environ['TEXT_AI_BASE_URL'].rstrip('/') + '/chat/completions',
-                               headers=auth_headers(), json=body)
+                               headers=headers, json=body)
+        log.info('Text AI response: auth=%.3fs request=%.3fs status=%s.',
+                 authenticated-started, time.perf_counter()-authenticated, response.status_code)
         response.raise_for_status()
         try:
             choice = response.json()['choices'][0]

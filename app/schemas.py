@@ -48,12 +48,24 @@ class Revision(Strict):
     version: int = Field(ge=1)
 
 
+class OfficerCapacity(Strict):
+    version: int = Field(ge=0, strict=True)
+    department: Literal['Facilities', 'Security', 'Health and Safety']
+    available: bool = Field(strict=True)
+    capacity: int = Field(ge=0, le=50, strict=True)
+
+
 class Triage(Revision):
     category: Literal['Hazard', 'Near miss', 'Minor injury', 'Other incident']
     priority: Literal['Immediate', 'Urgent', 'Routine']
     officer_id: str
+    department: str = Field(default='', max_length=100)
     reason: str = Field(min_length=3, max_length=2000)
     approve: bool = False
+
+
+class AssignmentRequest(Revision):
+    department: str = Field(default='', max_length=100)
 
 
 class Findings(Revision):

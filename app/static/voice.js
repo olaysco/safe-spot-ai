@@ -1,10 +1,10 @@
 'use strict';
 window.SafeSpotVoice = (() => {
-  let active = null;
+  let active = null, transcript = '';
   function stop() {
     if (active) active.cancel();
   }
-  function attach(textarea, button, status, onText) {
+  function attach(textarea, button, status, onText, preview = {}) {
     if (!textarea || !button || !status) return;
     const Recognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!Recognition || !window.isSecureContext) {
@@ -19,8 +19,15 @@ window.SafeSpotVoice = (() => {
       recognition.continuous = true;
       recognition.interimResults = true;
       let base = textarea.value.trimEnd(), accepted = '', ended = false, failed = false;
+      const previousTranscript = transcript;
+      function paintTranscript(interim = '') {
+        transcript = [previousTranscript, accepted].filter(Boolean).join(' ');
+        if (preview.final) preview.final.textContent = transcript || 'Your completed speech will appear here.';
+        if (preview.interim) preview.interim.textContent = interim ? 'Still transcribing: ' + interim : '';
+      }
       const seen = new Set();
       function restore() {
+        paintTranscript();
         textarea.readOnly = false;
         button.disabled = false;
         button.textContent = 'Use voice input';
@@ -47,6 +54,7 @@ window.SafeSpotVoice = (() => {
         }
         textarea.value = (base + (base && accepted ? ' ' : '') + accepted).slice(0, 8000);
         onText(textarea.value);
+        paintTranscript(interim);
         status.textContent = interim ? 'Listening: ' + interim : 'Text added. Select Stop voice input to check it.';
       };
       recognition.onerror = event => {
@@ -81,5 +89,5 @@ window.SafeSpotVoice = (() => {
   }
   window.addEventListener('pagehide', stop);
   document.addEventListener('visibilitychange', () => { if (document.hidden) stop(); });
-  return { attach, stop };
+  return { attach, stop, getTranscript: () => transcript, reset() { stop(); transcript = ''; } };
 })();

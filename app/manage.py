@@ -4,7 +4,7 @@ import secrets
 import time
 from pathlib import Path
 from sqlalchemy import select
-from app.database import Case, Group, User, connect
+from app.database import Case, Group, OfficerProfile, User, connect
 from app.domain import approval, audit, new_case
 from app.security import digest, hash_password
 from app.schemas import DEMO_LOGIN_EMAILS
@@ -43,6 +43,32 @@ def save_demo_credentials():
     path.write_text(''.join(f'{role}: {logins[email]}  password\n' for role, _, email in DEMO_ACCOUNTS))
 
 
+def configure_demo_officers(db, primary):
+    db.flush()
+    rows = [
+        (primary, 'Facilities', True, 6),
+        ('alex.facilities@example.test', 'Facilities', True, 4),
+        ('lee.facilities@example.test', 'Facilities', False, 4),
+        ('morgan.security@example.test', 'Security', True, 3),
+        ('robin.safety@example.test', 'Health and Safety', True, 3),
+    ]
+    names = {'alex.facilities@example.test': 'Alex Reed', 'lee.facilities@example.test': 'Lee Chen',
+             'morgan.security@example.test': 'Morgan Ellis', 'robin.safety@example.test': 'Robin Blake'}
+    for account, department, available, capacity in rows:
+        if isinstance(account, str):
+            email = account
+            account = db.scalar(select(User).where(User.email == email))
+            if account and account.role != 'officer':
+                raise SystemExit('A demonstration officer email belongs to another role.')
+            if not account:
+                account = User(name=names[email], role='officer', email=email, password=hash_password('password'))
+                db.add(account)
+                db.flush()
+        if not db.get(OfficerProfile, account.id):
+            db.add(OfficerProfile(user_id=account.id, department=department, available=available,
+                                  capacity=capacity, demo=True))
+
+
 def demo_accounts():
     engine, factory = connect()
     with factory() as db:
@@ -56,12 +82,13 @@ def demo_accounts():
 def seed():
     engine, factory = connect()
     with factory() as db:
-        configure_demo_accounts(db)
+        accounts = configure_demo_accounts(db)
+        configure_demo_officers(db, accounts['officer'])
         db.commit()
         save_demo_credentials()
         if not db.scalar(select(Case)):
             handler = db.scalar(select(User).where(User.role == 'handler'))
-            officer = db.scalar(select(User).where(User.role == 'officer'))
+            officer = accounts['officer']
             ids = []
             for index, (location, description) in enumerate([
                 ('East entrance', 'Water remains on the floor beside the entrance.'),

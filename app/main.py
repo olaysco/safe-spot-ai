@@ -9,7 +9,7 @@ from contextlib import asynccontextmanager
 from datetime import date
 from pathlib import Path
 
-from fastapi import Depends, FastAPI, File, HTTPException, Request, Response, UploadFile
+from fastapi import Depends, FastAPI, File, Form, HTTPException, Request, Response, UploadFile
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from PIL import Image, UnidentifiedImageError
@@ -17,11 +17,12 @@ from sqlalchemy import delete, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm.exc import StaleDataError
 
-from app import ai, assistant, schemas
+from app import ai, assistant, assignment, photo_analysis, schemas
 from app.storage import create_storage
 from app.database import Attachment, Case, Group, Job, Limit, Notification, Session, User, connect, uid
 from app.domain import approval, audit, invalidate, new_case, require, riddor_details, serialize, status, targets
 from app.security import digest, hash_password, normalize_reference, report_reference, verify_password
+from app import manager_overview
 from app.worker import add_notification, scan_alerts, tick
 
 log = logging.getLogger('safespot')
@@ -34,6 +35,11 @@ def create_app(database_url=None, worker=True):
 
     @asynccontextmanager
     async def lifespan(app):
+        if ai.capabilities()['text'] and os.getenv('TEXT_AI_AUTH_MODE') == 'entra':
+            try:
+                await asyncio.wait_for(asyncio.to_thread(ai.auth_headers), timeout=10)
+            except Exception:
+                log.warning('AI authentication preparation failed. Requests can try again.')
         stop = asyncio.Event()
         async def run_worker():
             while not stop.is_set():
@@ -147,7 +153,8 @@ def create_app(database_url=None, worker=True):
     @app.get('/api/config')
     def config():
         return {'ai': ai.capabilities(), 'email_mode': os.getenv('EMAIL_MODE', 'capture'),
-                'demo': True, 'storage': 'server', 'speech': 'not_connected'}
+                'demo': True, 'storage': 'server', 'speech': 'browser',
+                'departments': list(assignment.DEPARTMENTS)}
 
     @app.post('/api/auth/login')
     def login(payload: schemas.Login, request: Request, response: Response, db=Depends(db_session)):
@@ -179,13 +186,35 @@ def create_app(database_url=None, worker=True):
         return [{'id': u.id, 'name': u.name, 'role': u.role} for u in db.scalars(select(User))]
 
     @app.post('/api/report-assistance')
-    def report_assistance(payload: schemas.ReportAssistance, request: Request, db=Depends(db_session)):
+    def report_assistance(payload: schemas.ReportAssistance, request: Request, response: Response, db=Depends(db_session)):
+        started = time.perf_counter()
         rate_limit(request, db, 'assistance', 20)
+        prepared = time.perf_counter()
         try:
             details = ai.extract_details(payload.description)
         except Exception:
+            log.warning('Report assistance failed after %.3f seconds.', time.perf_counter()-started)
             raise HTTPException(503, 'AI assistance is unavailable. Complete the report yourself.')
+        finished = time.perf_counter()
+        response.headers['Server-Timing'] = f'prepare;dur={(prepared-started)*1000:.1f}, ai;dur={(finished-prepared)*1000:.1f}'
+        log.info('Report assistance completed: prepare=%.3fs ai=%.3fs.', prepared-started, finished-prepared)
         return {'details': details, 'requires_review': True}
+
+    @app.post('/api/report-photo-analysis')
+    async def analyze_report_photo(request: Request, file: UploadFile = File(...),
+                                   consent: bool = Form(False), description: str = Form(''), db=Depends(db_session)):
+        require(consent, 'Approve AI photo analysis before continuing.', 403)
+        require(len(description) <= 8000, 'The description is too long.', 422)
+        rate_limit(request, db, 'photo_analysis', 10)
+        try:
+            content = await file.read(photo_analysis.MAX_BYTES + 1)
+            return await asyncio.to_thread(photo_analysis.analyze, content, consent=True, description=description)
+        except photo_analysis.PhotoInvalid as exc:
+            raise HTTPException(exc.status_code, str(exc))
+        except ai.AIUnavailable:
+            raise HTTPException(503, 'Photo analysis is unavailable. You can describe the photo yourself.')
+        finally:
+            await file.close()
 
     @app.post('/api/reports', status_code=201)
     def report(payload: schemas.Report, request: Request, db=Depends(db_session)):
@@ -229,18 +258,36 @@ def create_app(database_url=None, worker=True):
     def detail(case_id: str, user=Depends(current_user), db=Depends(db_session)):
         return full_case(db, fetch_case(db, case_id, user))
 
+    @app.post('/api/cases/{case_id}/assignment-recommendation')
+    def recommend_assignment(case_id: str, payload: schemas.AssignmentRequest,
+                             user=Depends(current_user), db=Depends(db_session)):
+        role(user, 'handler', 'manager')
+        case = fetch_case(db, case_id, user, payload.version)
+        recommendation = assignment.recommend(db, case, payload.department)
+        data = copy.deepcopy(case.data)
+        data['assignment_recommendation'] = recommendation
+        audit(data, user, 'Assignment recommendation prepared', recommendation['reason'])
+        return {'case': persist(db, case, data), 'recommendation': recommendation}
+
     @app.post('/api/cases/{case_id}/triage')
     def triage(case_id: str, payload: schemas.Triage, user=Depends(current_user), db=Depends(db_session)):
         role(user, 'handler', 'manager')
         case = fetch_case(db, case_id, user, payload.version)
         officer = db.get(User, payload.officer_id)
         require(officer and officer.role == 'officer', 'Select a field officer.', 422)
+        assignment_snapshot = assignment.validate_assignment(db, case, officer.id, payload.department) if payload.approve else None
         data = copy.deepcopy(case.data)
         invalidate(data, 'triage')
         for key in ('category', 'priority', 'officer_id'):
             data[key] = getattr(payload, key)
+        data['department'] = assignment_snapshot['department'] if assignment_snapshot else payload.department
         if payload.approve:
-            data['approvals']['triage'] = approval(user, {k: data[k] for k in ('category', 'priority', 'officer_id')})
+            data['assignment'] = assignment_snapshot
+            data['approvals']['triage'] = approval(user, {
+                **{k: data[k] for k in ('category', 'priority', 'officer_id', 'department')},
+                'capacity_check': assignment_snapshot, 'reason': payload.reason,
+                'recommendation': data.get('assignment_recommendation'),
+            })
             approved_at = data['approvals']['triage']['at']
             add_notification(db, f'assignment:{case.id}:{approved_at}', f'Case assigned: {case.reference}',
                              f'You have an approved assignment for {case.reference} at {data["report"]["location"]}. '
@@ -536,6 +583,30 @@ def create_app(database_url=None, worker=True):
         db.commit()
         return {'ok': True}
 
+    @app.get('/api/manager/capacity')
+    def capacity_list(user=Depends(current_user), db=Depends(db_session)):
+        role(user, 'manager')
+        return {'officers': assignment.list_profiles(db), 'departments': list(assignment.DEPARTMENTS), 'basis': assignment.BASIS}
+
+    @app.post('/api/manager/capacity/{officer_id}')
+    def capacity_update(officer_id: str, payload: schemas.OfficerCapacity,
+                        user=Depends(current_user), db=Depends(db_session)):
+        role(user, 'manager')
+        assignment.update_profile(db, officer_id, **payload.model_dump(), actor=user)
+        db.commit()
+        return {'officers': assignment.list_profiles(db), 'departments': list(assignment.DEPARTMENTS), 'basis': assignment.BASIS}
+
+    @app.post('/api/manager/overview')
+    def overview(payload: manager_overview.OverviewRequest, request: Request,
+                 user=Depends(current_user), db=Depends(db_session)):
+        role(user, 'manager')
+        rate_limit(request, db, 'manager-overview', 20)
+        records = list(db.scalars(select(Case).where(Case.created >= time.time()-payload.days*86400)))
+        try:
+            return manager_overview.generate(records, payload.days)
+        except Exception:
+            raise HTTPException(503, 'AI overview is unavailable. Use the dashboard charts or try again.')
+
     @app.post('/api/manager/summary')
     def summary(user=Depends(current_user), db=Depends(db_session)):
         role(user, 'manager')
@@ -611,7 +682,7 @@ def create_app(database_url=None, worker=True):
 
     @app.get('/')
     def home():
-        return FileResponse(STATIC / 'index.html')
+        return FileResponse(STATIC / 'index.html', headers={'Cache-Control': 'no-cache'})
 
     app.mount('/static', StaticFiles(directory=STATIC), name='static')
     return app

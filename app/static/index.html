@@ -3,12 +3,20 @@
 <head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Safe Spot</title><meta name="description" content="Report safety concerns and track action.">
-<link rel="stylesheet" href="/static/base.css"><link rel="stylesheet" href="/static/app.css">
-<link rel="stylesheet" href="/static/assistant.css">
-<link rel="stylesheet" href="/static/workspace.css">
-<script src="/static/voice.js" defer></script>
-<script src="/static/assistant.js" defer></script>
-<script src="/static/app.js" defer></script>
+<link rel="stylesheet" href="/static/base.css?v=20261113-header"><link rel="stylesheet" href="/static/app.css?v=20261113-header">
+<link rel="stylesheet" href="/static/assistant.css?v=20261113-header">
+<link rel="stylesheet" href="/static/workspace.css?v=20261113-header">
+<link rel="stylesheet" href="/static/report-input.css?v=20261120-sample">
+<link rel="stylesheet" href="/static/assignment.css?v=20261115-assignment">
+<script src="/static/assignment.js?v=20261115-assignment" defer></script>
+<script src="/static/capacity.js?v=20261115-capacity" defer></script>
+<script src="/static/voice.js?v=20261113-header" defer></script>
+<script src="/static/photo-viewer.js?v=20261116" defer></script>
+<script src="/static/assistant.js?v=20261113-header" defer></script>
+<link rel="stylesheet" href="/static/dashboard.css?v=20261113-overview">
+<script src="/static/dashboard.js?v=20261113-header" defer></script>
+<script src="/static/manager-overview.js?v=20261113-overview" defer></script>
+<script src="/static/app.js?v=20261120-sample" defer></script>
 </head>
 <body>
 <a class="skip" href="#main">Skip to main content</a>
@@ -17,4 +25,5 @@
 <div id="message" class="container" role="status" aria-live="polite"></div>
 <main id="main" class="container" tabindex="-1"><p>Loading Safe Spot…</p></main>
 <footer><div class="container footer-inner"><p><strong>Safe Spot</strong><br>Team demonstration</p></div></footer>
+<dialog id="photo-viewer" class="photo-viewer" aria-label="Enlarged photo"><div class="photo-viewer-bar"><button type="button" class="secondary" id="close-photo-viewer" autofocus>Close photo</button></div><img id="photo-viewer-image" alt=""></dialog>
 </body></html>

@@ -78,7 +78,7 @@ resource app 'Microsoft.App/containerApps@2025-01-01' = if (serviceKind == 'web'
           ]
         }
       ]
-      scale: { minReplicas: 0, maxReplicas: 1 }
+      scale: { minReplicas: 1, maxReplicas: 1 }
     }
   }
 }

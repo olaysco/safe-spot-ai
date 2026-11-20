@@ -17,8 +17,9 @@ function setup(supported=true) {
   const button={disabled:false,setAttribute(){},addEventListener(event,fn){this.click=fn;}};
   const status={textContent:''};
   let saved='';
-  window.SafeSpotVoice.attach(input,button,status,text=>{saved=text;});
-  return {input,button,status,window,get instance(){return instance;},get saved(){return saved;}};
+  const preview={final:{textContent:''},interim:{textContent:''}};
+  window.SafeSpotVoice.attach(input,button,status,text=>{saved=text;},preview);
+  return {input,button,status,preview,window,get instance(){return instance;},get saved(){return saved;}};
 }
 test('Voice input appends text once and restores editing',()=>{
   const s=setup();s.button.click();
@@ -49,4 +50,19 @@ test('Unsupported browsers keep typing available',()=>{
   assert.equal(s.button.disabled,true);
   assert.equal(s.input.readOnly,false);
   assert.match(s.status.textContent,/unavailable/);
+});
+
+test('Interim speech stays separate from confirmed transcript',()=>{
+  const s=setup();s.button.click();
+  s.instance.onresult({resultIndex:0,results:[Object.assign([{transcript:'Unfinished speech'}],{isFinal:false})]});
+  assert.equal(s.input.value,'Original words');
+  assert.equal(s.window.SafeSpotVoice.getTranscript(),'');
+  assert.match(s.preview.interim.textContent,/Unfinished speech/);
+  s.instance.onresult({resultIndex:0,results:[Object.assign([{transcript:'Completed speech'}],{isFinal:true})]});
+  assert.equal(s.window.SafeSpotVoice.getTranscript(),'Completed speech');
+  assert.equal(s.preview.interim.textContent,'');
+  s.button.click();s.input.value='Edited report';
+  assert.equal(s.window.SafeSpotVoice.getTranscript(),'Completed speech');
+  s.window.SafeSpotVoice.reset();
+  assert.equal(s.window.SafeSpotVoice.getTranscript(),'');
 });
